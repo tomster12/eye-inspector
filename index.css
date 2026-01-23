@@ -1,0 +1,218 @@
+@font-face {
+	font-family: "Oxygen";
+	src: url("assets/oxygen-regular.ttf");
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+:root {
+	box-sizing: border-box;
+	font-family: "Cousine", monospace;
+	font-size: 20px;
+
+	--standard-padding: 0.6rem;
+	--small-padding: 0.3rem;
+	--standard-border-radius: 0.1rem;
+	--message-letter-size: 1.5rem;
+	--message-letter-height: 1.75rem;
+	--message-gap: 0.4rem;
+
+	--col-bg: #2d3744;
+	--col-panel-bg: #292e37;
+	--col-panel-fg: #444d59;
+
+	--col-toggle-button: #424a54;
+	--col-toggle-button-active: #626975;
+	--col-toggle-button-hovered: #969fac;
+	--col-toggle-button-label: #848e9c;
+	--col-toggle-button-label-active: #b4beca;
+	--col-toggle-button-label-hovered: #e7ebef;
+
+	--col-message-indices-colour: #222329;
+	--col-message-letter-bg: #4c5663;
+	--col-message-letter-colour: #34343a;
+}
+
+body {
+	background-color: var(--col-bg);
+}
+
+/* -------------------------------------- Layout -------------------------------------- */
+
+.layout-outer {
+	max-width: 1600px;
+	margin: 1rem auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--standard-padding);
+}
+
+.layout-row-1 {
+	flex: 0;
+}
+
+.layout-row-2 {
+	flex: 1;
+	display: flex;
+	flex-direction: row;
+	gap: var(--standard-padding);
+}
+
+.layout-row-2 div {
+	flex: 1;
+}
+
+body.fullscreen .layout-outer {
+	max-width: unset;
+	margin: unset;
+	height: 100%;
+	gap: var(--small-padding);
+}
+
+body.fullscreen .layout-row-2 {
+	gap: var(--small-padding);
+}
+
+/* -------------------------------------- Messages Panel -------------------------------------- */
+
+#messages-panel {
+	padding: var(--standard-padding);
+	border-radius: var(--standard-border-radius);
+	display: flex;
+	flex-direction: column;
+	gap: var(--standard-padding);
+	background-color: var(--col-panel-bg);
+}
+
+.messages-toolbar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: var(--standard-padding);
+}
+
+.messages-toolbar-label {
+	color: rgb(154, 154, 154);
+}
+
+.messages-toolbar-option {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--standard-border-radius);
+	background-color: var(--col-toggle-button);
+	cursor: pointer;
+	user-select: none;
+	color: white;
+	padding: 0.3rem var(--standard-padding);
+	text-align: center;
+}
+
+.messages-toolbar-option.active {
+	background-color: var(--col-toggle-button-active);
+}
+
+.messages-toolbar-option:hover {
+	background-color: var(--col-toggle-button-hovered);
+}
+
+.messages-toolbar-option-image {
+	flex-shrink: 0;
+	width: var(--message-letter-size);
+	height: var(--message-letter-size);
+	border-radius: var(--standard-border-radius);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	background-color: var(--col-toggle-button-label);
+	cursor: pointer;
+}
+
+#messages-panel-content {
+	position: relative;
+	display: flex;
+	flex-direction: row;
+	background-color: var(--col-panel-fg);
+	border-radius: var(--standard-border-radius);
+	overflow: hidden;
+	overflow-x: auto;
+	padding-bottom: var(--standard-padding);
+}
+
+#messages-column-indices {
+	position: absolute;
+	display: flex;
+	flex-direction: row;
+	gap: var(--message-gap);
+}
+
+#messages-row-indices {
+	margin-top: var(--message-letter-size);
+	position: sticky;
+	left: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--message-gap);
+	padding-top: var(--message-gap);
+	background-color: var(--col-panel-fg);
+}
+
+#messages-list {
+	margin-top: var(--message-letter-size);
+	display: flex;
+	flex-direction: column;
+	padding: var(--message-gap);
+	gap: var(--message-gap);
+	padding-bottom: 0;
+}
+
+#messages-column-indices div,
+#messages-row-indices div {
+	flex-shrink: 0;
+	width: var(--message-letter-size);
+	height: var(--message-letter-size);
+	text-align: center;
+	line-height: var(--message-letter-height);
+	color: var(--col-message-indices-colour);
+}
+
+.message {
+	display: flex;
+	gap: var(--message-gap);
+}
+
+.message div {
+	flex-shrink: 0;
+	width: var(--message-letter-size);
+	height: var(--message-letter-size);
+	text-align: center;
+	line-height: var(--message-letter-height);
+	background-color: var(--col-message-letter-bg);
+	color: var(--col-message-letter-colour);
+	border-radius: var(--standard-border-radius);
+}
+
+body.tight-spacing .message div {
+	border-radius: unset;
+}
+
+/* -------------------------------------- Config Panel -------------------------------------- */
+
+#config-panel {
+	min-height: 10rem;
+	background-color: var(--col-panel-bg);
+	border-radius: var(--standard-border-radius);
+}
+
+/* -------------------------------------- Inspect Panel -------------------------------------- */
+
+#inspect-panel {
+	min-height: 10rem;
+	background-color: var(--col-panel-bg);
+	border-radius: var(--standard-border-radius);
+}

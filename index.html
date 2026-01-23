@@ -1,0 +1,52 @@
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>Eye Inspector</title>
+		<link rel="stylesheet" href="index.css" />
+	</head>
+
+	<body>
+		<div class="layout-outer">
+			<div class="layout-row-1">
+				<div id="messages-panel">
+					<div class="messages-toolbar">
+						<div class="messages-toolbar-label">Options</div>
+						<div id="toggle-show-ascii-button" class="messages-toolbar-option">ASCII</div>
+						<div id="toggle-tight-spacing-button" class="messages-toolbar-option">Tight</div>
+						<div id="toggle-fullscreen-button" class="messages-toolbar-option">Fullscreen</div>
+
+						<div class="messages-toolbar-label" style="margin-left: 2rem">Highlight</div>
+						<div id="toggle-highlight-none-button" class="messages-toolbar-option">None</div>
+						<div id="toggle-highlight-values-button" class="messages-toolbar-option">Values</div>
+						<div id="toggle-highlight-shared-ct-button" class="messages-toolbar-option">Shared CT</div>
+						<div id="toggle-highlight-shared-pt-button" class="messages-toolbar-option">Shared PT</div>
+						<div id="toggle-highlight-isomorphs-button" class="messages-toolbar-option">Isomorphs</div>
+						<div id="toggle-highlight-allomorphs-button" class="messages-toolbar-option">Allomorphs</div>
+					</div>
+
+					<div id="messages-panel-content">
+						<div id="messages-column-indices">
+							<div></div>
+						</div>
+						<div id="messages-row-indices"></div>
+						<div id="messages-list"></div>
+					</div>
+				</div>
+			</div>
+
+			<div class="layout-row-2">
+				<div id="config-panel"></div>
+				<div id="inspect-panel"></div>
+			</div>
+
+			<!-- <div id="isomorphs-view">
+				<div id="isomorphs-info"></div>
+				<div id="isomorphs-list">
+					<div class="empty">No isomorphs...</div>
+				</div>
+			</div> -->
+		</div>
+
+		<script src="index.js"></script>
+	</body>
+</html>
