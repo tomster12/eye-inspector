@@ -420,7 +420,7 @@ class IsomorphGenerator {
 		this.isomorphs = {};
 		this.onGenerate = new MyEvent();
 		this.maxLength = 30;
-		this.minValues = 5;
+		this.minValues = 3;
 		this.allowSharedSections = false;
 		this.isVisible = false;
 
