@@ -727,6 +727,10 @@ class SharedPTInspector {
 	calculateAndHighlight() {
 		if (!this.isVisible) return;
 
+		for (let pattern in this.isomorphDisplays) {
+			this.isomorphDisplays[pattern].patternElement.style.backgroundColor = null;
+		}
+
 		if (Object.keys(this.selectedPatterns).length == 0) {
 			this.app.highlightMessagesUniform(Styles.StandardDark);
 			return;
