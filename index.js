@@ -49,8 +49,9 @@ const EYES = [
 ];
 
 class Styles {
-	static Blank = { bg: null, fg: null };
-	static Plain = { bg: null, fg: "#ffffff" };
+	static Disabled = { bg: null, fg: null };
+	static StandardDark = { bg: null, fg: "#ffffff" };
+	static StandardBright = { bg: "#8792a0", fg: "#3c3e3f" };
 
 	static indexed(index) {
 		const hueOffset = 140;
@@ -82,19 +83,29 @@ class IdTracker {
 	}
 }
 
-const HighlightMode = Object.fromEntries(["None", "Values", "SharedCT", "SharedPT", "Isomorphs", "Allomorphs"].map((k, i) => [k, i]));
+const HighlightMode = Object.fromEntries(["None", "Values", "SharedCT", "Isomorphs", "Allomorphs", "SharedPT"].map((k, i) => [k, i]));
 
 // --------------------------------------------------------------------
 
-function calculateIsomorphs(msgs, maxLength = 30) {
-	// pattern: [ (msg, l0) ]
+function choose(n, k) {
+	// n choose k binomial coefficient
+	if (k > n / 2) k = n - k;
+	let res = 1;
+	for (let i = 1; i <= k; i++) {
+		res *= (n - i + 1) / i;
+	}
+	return res;
+}
+
+function calculateIsomorphs(messages, maxLength = 30) {
+	// pattern: { instances: [ [message, letter], ... ], score: 0 }
 	let isomorphs = {};
 
 	// For each (l0 + pattern length)
 	for (let patternLength = 2; patternLength <= maxLength; patternLength++) {
-		for (let msgIndex = 0; msgIndex < msgs.length; msgIndex++) {
-			for (let l0Index = 0; l0Index < msgs[msgIndex].length - patternLength + 1; l0Index++) {
-				let instance = msgs[msgIndex].slice(l0Index, l0Index + patternLength);
+		for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
+			for (let l0Index = 0; l0Index < messages[msgIndex].length - patternLength + 1; l0Index++) {
+				let instance = messages[msgIndex].slice(l0Index, l0Index + patternLength);
 
 				// Start and end values must have a repeat within the range
 				if (instance[0] != instance[instance.length - 1]) {
@@ -123,30 +134,71 @@ function calculateIsomorphs(msgs, maxLength = 30) {
 				}
 
 				// Now can track the instance of this isomorph
-				if (!isomorphs[pattern]) isomorphs[pattern] = [];
-				isomorphs[pattern].push([msgIndex, l0Index]);
+				if (!isomorphs[pattern]) isomorphs[pattern] = { instances: [] };
+				isomorphs[pattern].instances.push([msgIndex, l0Index]);
 			}
 		}
+	}
+
+	// Requirements for score calculation
+	const alphabetSize = new Set(messages.flat()).size;
+	const totalMessageLength = messages.reduce((acc, msg) => acc + msg.length, 0);
+
+	// Calculate score for each isomorph group
+	for (let pattern in isomorphs) {
+		const isomorph = isomorphs[pattern];
+		const isomorphLength = pattern.length;
+		const isomorphInstances = isomorph.instances.length;
+		if (isomorphInstances === 1) continue;
+
+		// Calculate how many repeats are inthe isomorph
+		let isomorphLettersSeen = new Set();
+		let internalRepeatCount = 0;
+		for (let letter of pattern) {
+			if (letter === ".") continue;
+			if (!isomorphLettersSeen.has(letter)) {
+				isomorphLettersSeen.add(letter);
+			} else {
+				internalRepeatCount++;
+			}
+		}
+
+		if (internalRepeatCount === 1) continue;
+		const isoProbability = 1 / Math.pow(alphabetSize, internalRepeatCount);
+
+		// Assume binomially distributed occurrences across the length of the message
+		// Calculate p(occurrences >= isomorphInstances)
+		const trialCount = totalMessageLength - messages.length * isomorphLength;
+		let totalProbability = 0.0;
+		let lastProbability = 0.0;
+		for (let occurrences = isomorphInstances; occurrences < isomorphInstances + 30; occurrences++) {
+			totalProbability += choose(trialCount, occurrences) * Math.pow(1 - isoProbability, trialCount - occurrences) * Math.pow(isoProbability, occurrences);
+
+			// Stop when we reach the precision limit
+			if (totalProbability == lastProbability) break;
+			lastProbability = totalProbability;
+		}
+		isomorph.score = -Math.log10(totalProbability);
 	}
 
 	return isomorphs;
 }
 
-function calculateAllomorphs(msgs) {
+function calculateAllomorphs(messages) {
 	// { msg: letters[ allomorphs[ {gap,msg,letter} ] ] }
 	let allomorphs = {};
 
 	// Setup allomorph data
-	for (let msgIndex in msgs) {
+	for (let msgIndex in messages) {
 		allomorphs[msgIndex] = [];
-		for (let _ in msgs[msgIndex]) {
+		for (let _ in messages[msgIndex]) {
 			allomorphs[msgIndex].push([]);
 		}
 	}
 
 	// For each repeat (l0 -> l1)
-	for (let msg0Index = 0; msg0Index < msgs.length; msg0Index++) {
-		let msg0 = msgs[msg0Index];
+	for (let msg0Index = 0; msg0Index < messages.length; msg0Index++) {
+		let msg0 = messages[msg0Index];
 
 		for (let l0Index = 0; l0Index < msg0.length; l0Index++) {
 			let l0 = msg0[l0Index];
@@ -158,8 +210,8 @@ function calculateAllomorphs(msgs) {
 					const gap = l1Index - l0Index;
 
 					// For each conflicting repeat (l2 -> l3)
-					for (let msg1Index = 0; msg1Index < msgs.length; msg1Index++) {
-						let msg1 = msgs[msg1Index];
+					for (let msg1Index = 0; msg1Index < messages.length; msg1Index++) {
+						let msg1 = messages[msg1Index];
 
 						for (let l2Index = 0; l2Index < msg1.length; l2Index++) {
 							let l2 = msg1[l2Index];
@@ -197,23 +249,22 @@ function getAllomorphsForPosition(allAllomorphs, msgIndex, lIndex) {
 	return allomorphs;
 }
 
-function calculateShared(msgs) {
+function calculateShared(messages) {
 	// We want to calculate shared columns between messages
-	// But ensure the assigned values are consistent
-
+	// But ensure the assigned values are consistent row-wise
 	groups = {};
 	let output = [];
 	let ids = new IdTracker(1);
 
-	for (let _ in msgs) output.push([]);
+	for (let _ in messages) output.push([]);
 
 	// Go through column at a time
 	let col = 0;
 	while (true) {
 		// Group up messages by shared value
 		let foundGroups = {};
-		for (let msgIndex = 0; msgIndex < msgs.length; msgIndex++) {
-			let msg = msgs[msgIndex];
+		for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
+			let msg = messages[msgIndex];
 			if (msg.length <= col) continue;
 			if (!foundGroups[msg[col]]) foundGroups[msg[col]] = [];
 			foundGroups[msg[col]].push(msgIndex);
@@ -263,41 +314,29 @@ function calculateShared(msgs) {
 
 // --------------------------------------------------------------------
 
-class IsomorphCalculator {
-	constructor(messageView) {
-		this.calculatorElement = document.getElementById("isomorph-calculator");
-		this.generateButtonElement = document.getElementById("isomorph-calculator-generate-button");
-		this.inputMaxLengthElement = document.getElementById("isomorph-calculator-input-max-length");
-		this.inputMinValuesElement = document.getElementById("isomorph-calculator-input-min-values");
-		this.inputSharedSectionsElement = document.getElementById("isomorph-calculator-input-shared-sections");
-		this.inputSubPatternsElement = document.getElementById("isomorph-calculator-input-sub-patterns");
-		this.inputRemoveOverlapsElement = document.getElementById("isomorph-calculator-input-remove-overlaps");
-		this.inputSubPatternMaxDiffElement = document.getElementById("isomorph-calculator-input-sub-patterns-max-diff");
-
-		this.messageView = messageView;
+class IsomorphGenerator {
+	constructor(app) {
+		this.app = app;
 		this.isomorphs = {};
-		this.onGenerateIsomorphListeners = [];
+		this.onGenerate = null;
 		this.maxLength = 30;
 		this.minValues = 2;
 		this.allowSharedSections = false;
-		this.generateSubPatterns = false;
-		this.subPatternMaxDiff = 1;
 
-		this.calculatorElement.addEventListener("keypress", (evt) => {
+		this.containerElement = document.getElementById("isomorph-generator");
+		this.generateButtonElement = document.getElementById("isomorph-generator-generate-button");
+		this.inputMaxLengthElement = document.getElementById("isomorph-generator-input-max-length");
+		this.inputMinValuesElement = document.getElementById("isomorph-generator-input-min-values");
+		this.inputSharedSectionsElement = document.getElementById("isomorph-generator-input-shared-sections");
+
+		this.containerElement.addEventListener("keypress", (evt) => {
 			if (evt.keyCode === 13) {
 				evt.preventDefault();
 				this.generate();
 			}
 		});
 
-		this.inputSubPatternsElement.onchange = (e) => {
-			this.inputSubPatternMaxDiffElement.parentElement.style.display = e.target.checked ? "flex" : "none";
-		};
-		this.inputSubPatternMaxDiffElement.parentElement.style.display = this.inputSubPatternsElement.checked ? "flex" : "none";
-
 		this.generateButtonElement.onclick = () => this.generate();
-
-		this.messageView.onMessagesChangedListeners.push(() => this.generate());
 	}
 
 	async generate() {
@@ -306,17 +345,13 @@ class IsomorphCalculator {
 		this.maxLength = parseInt(this.inputMaxLengthElement.value);
 		this.minValues = parseInt(this.inputMinValuesElement.value);
 		this.allowSharedSections = this.inputSharedSectionsElement.checked;
-		this.generateSubPatterns = this.inputSubPatternsElement.checked;
-		this.removeOverlaps = this.inputRemoveOverlapsElement.checked;
-		this.subPatternMaxDiff = parseInt(this.inputSubPatternMaxDiffElement.value);
 
-		this.isomorphs = calculateIsomorphs(this.messageView.messagesParsed, this.messageView.messagesAlphabet.length, this.maxLength);
+		this.isomorphs = calculateIsomorphs(this.app.messages, this.maxLength);
 
 		// Filter isomorphs that have:
 		// - At least 2 instances
 		// - At least minValues distinct letters
 		// - At least 2 distinct sequences if allowSharedSections is false
-
 		for (let pattern in this.isomorphs) {
 			let letterSet = new Set(pattern.split("").filter((char) => char !== "."));
 			if (letterSet.size < this.minValues) {
@@ -327,7 +362,7 @@ class IsomorphCalculator {
 			if (!this.allowSharedSections && this.isomorphs[pattern].instances.length > 1) {
 				let sequenceSet = new Set();
 				for (let instance of this.isomorphs[pattern].instances) {
-					const instanceList = this.messageView.messagesParsed[instance[0]].slice(instance[1], instance[1] + pattern.length);
+					const instanceList = this.app.messages[instance[0]].slice(instance[1], instance[1] + pattern.length);
 					const instanceString = instanceList.join(",");
 					sequenceSet.add(instanceString);
 				}
@@ -338,65 +373,7 @@ class IsomorphCalculator {
 			}
 		}
 
-		// Remove overlapping instances of each isomorph
-
-		if (this.removeOverlaps) {
-			for (let pattern in this.isomorphs) {
-				const len = pattern.length;
-				const instances = this.isomorphs[pattern].instances;
-
-				const byMessage = new Map();
-				for (const inst of instances) {
-					const msgIdx = inst[0];
-					if (!byMessage.has(msgIdx)) byMessage.set(msgIdx, []);
-					byMessage.get(msgIdx).push(inst);
-				}
-
-				const filtered = [];
-				for (const insts of byMessage.values()) {
-					insts.sort((a, b) => a[1] - b[1]);
-					let lastEnd = -Infinity;
-
-					for (const inst of insts) {
-						const start = inst[1];
-						const end = start + len;
-
-						if (start >= lastEnd) {
-							filtered.push(inst);
-							lastEnd = end;
-						}
-					}
-				}
-
-				if (filtered.length < 2) {
-					delete this.isomorphs[pattern];
-				} else {
-					this.isomorphs[pattern].instances = filtered;
-				}
-			}
-		}
-
-		// Calculate sub-patterns for the filtered isomorphs
-		// We want to only add the sub-pattern as a nearby isomorph if it has an instance
-
-		if (this.generateSubPatterns) {
-			for (let pattern in this.isomorphs) {
-				this.isomorphs[pattern].similarIsomorphs = [];
-			}
-
-			for (let pattern in this.isomorphs) {
-				const subPatterns = calculateSubPatterns(pattern, this.subPatternMaxDiff);
-				for (let subPattern of subPatterns) {
-					if (subPattern.pattern in this.isomorphs) {
-						this.isomorphs[pattern].similarIsomorphs.push(subPattern.pattern);
-						this.isomorphs[subPattern.pattern].similarIsomorphs.push(pattern);
-					}
-				}
-			}
-		}
-
 		// Filter out isomorphs with 1 instance if they have no similar isomorphs
-
 		for (let pattern in this.isomorphs) {
 			if (this.isomorphs[pattern].instances.length === 1 && (!this.generateSubPatterns || this.isomorphs[pattern].similarIsomorphs.length === 0)) {
 				delete this.isomorphs[pattern];
@@ -404,10 +381,7 @@ class IsomorphCalculator {
 		}
 
 		this.toggleGenerateButtonSpinner(false);
-
-		for (let listener of this.onGenerateIsomorphListeners) {
-			listener();
-		}
+		if (this.onGenerate) this.onGenerate(this.isomorphs);
 	}
 
 	toggleGenerateButtonSpinner(toggle) {
@@ -415,38 +389,31 @@ class IsomorphCalculator {
 	}
 }
 
-class IsomorphView {
-	constructor(messageView, isomorphCalculator) {
-		this.isomorphListElement = document.getElementById("isomorphs-list");
-		this.isomorphInfoElement = document.getElementById("isomorphs-info");
-		this.isomorphsSelectionViewElement = document.getElementById("isomorph-selection-view");
-		this.isomorphsSelectionPatternContainerElement = document.getElementById("isomorph-selection-pattern-container");
-		this.isomorphsSelectionPatternElement = document.getElementById("isomorph-selection-pattern");
-		this.isomorphsSelectionListElement = document.getElementById("isomorph-selection-list");
-
+class IsomorphInspector {
+	constructor(app, generator) {
+		this.app = app;
+		this.generator = generator;
 		this.isomorphDisplays = {};
 		this.selectedPattern = null;
-		this.messageView = messageView;
-		this.isomorphCalculator = isomorphCalculator;
 		this.sortedIsomorphs = [];
 
-		this.isomorphCalculator.onGenerateIsomorphListeners.push(() => this.reinitializeIsomorphs());
-		this.messageView.onShowAsciiChangedListeners.push(() => this.updateIsomorphSelectionList());
+		this.isomorphListElement = document.getElementById("isomorphs-inspector-list");
+		this.isomorphInfoElement = document.getElementById("isomorphs-inspector-info");
+
+		this.generator.onGenerate = () => this.recreateIsomorphElements();
 	}
 
-	reinitializeIsomorphs() {
+	recreateIsomorphElements(isomorphs) {
 		this.sortedIsomorphs = [];
 		this.selectIsomorph(null);
 
-		if (Object.keys(this.isomorphCalculator.isomorphs).length == 0) {
+		if (Object.keys(this.generator.isomorphs).length == 0) {
 			this.isomorphListElement.innerHTML = "<div class='empty'>No isomorphs...</div>";
 		} else {
-			this.sortedIsomorphs = Object.keys(this.isomorphCalculator.isomorphs).sort(
-				(a, b) => this.isomorphCalculator.isomorphs[b].score - this.isomorphCalculator.isomorphs[a].score,
-			);
-
+			this.sortedIsomorphs = Object.keys(this.generator.isomorphs).sort((a, b) => this.generator.isomorphs[b].score - this.generator.isomorphs[a].score);
 			this.isomorphListElement.innerHTML = "";
 
+			// Create an element for each isomorph
 			for (let pattern of this.sortedIsomorphs) {
 				let isomorphDisplay = {};
 
@@ -459,11 +426,11 @@ class IsomorphView {
 
 				isomorphDisplay.labelElement = document.createElement("div");
 				isomorphDisplay.labelElement.classList.add("label");
-				let text = this.isomorphCalculator.isomorphs[pattern].instances.length.toString();
-				if (this.isomorphCalculator.generateSubPatterns && this.isomorphCalculator.isomorphs[pattern].similarIsomorphs.length > 0) {
+				let text = this.generator.isomorphs[pattern].instances.length.toString();
+				if (this.generator.generateSubPatterns && this.generator.isomorphs[pattern].similarIsomorphs.length > 0) {
 					let total = 0;
-					for (let similarPattern of this.isomorphCalculator.isomorphs[pattern].similarIsomorphs) {
-						total += this.isomorphCalculator.isomorphs[similarPattern].instances.length;
+					for (let similarPattern of this.generator.isomorphs[pattern].similarIsomorphs) {
+						total += this.generator.isomorphs[similarPattern].instances.length;
 					}
 					text += "(" + total + ")";
 				}
@@ -471,7 +438,7 @@ class IsomorphView {
 
 				isomorphDisplay.scoreElement = document.createElement("div");
 				isomorphDisplay.scoreElement.classList.add("score");
-				isomorphDisplay.scoreElement.textContent = this.isomorphCalculator.isomorphs[pattern].score.toFixed(2);
+				isomorphDisplay.scoreElement.textContent = this.generator.isomorphs[pattern].score.toFixed(2);
 
 				isomorphDisplay.element.appendChild(isomorphDisplay.patternElement);
 				isomorphDisplay.element.appendChild(isomorphDisplay.labelElement);
@@ -490,21 +457,16 @@ class IsomorphView {
 		this.isomorphInfoElement.appendChild(infoElement1);
 
 		let infoElement2 = document.createElement("div");
-		let totalInstances = Object.values(this.isomorphCalculator.isomorphs).reduce((acc, val) => acc + val.instances.length, 0);
+		let totalInstances = Object.values(this.generator.isomorphs).reduce((acc, val) => acc + val.instances.length, 0);
 		infoElement2.textContent = "Total instances: " + totalInstances;
 		this.isomorphInfoElement.appendChild(infoElement2);
-
-		let infoElement3 = document.createElement("div");
-		let totalScore = Object.values(this.isomorphCalculator.isomorphs).reduce((acc, val) => acc + val.score, 0);
-		let avgScore = totalScore / this.sortedIsomorphs.length;
-		infoElement3.textContent = "Total score: " + totalScore.toFixed(2) + " (avg. " + avgScore.toFixed(2) + ")";
-		this.isomorphInfoElement.appendChild(infoElement3);
 	}
 
 	selectIsomorph(pattern) {
+		this.app.highlightMessagesUniform(Styles.Disabled);
+
 		// Remove old isomorph highlighting
 		if (this.selectedPattern != null) {
-			this.messageView.clearIsomorphHighlighting();
 			if (this.isomorphDisplays[this.selectedPattern] != null) {
 				this.isomorphDisplays[this.selectedPattern].element.classList.remove("selected");
 			}
@@ -513,7 +475,6 @@ class IsomorphView {
 		// Toggling current isomorph so just deselect
 		if (this.selectedPattern == pattern) {
 			this.selectedPattern = null;
-			this.updateIsomorphSelectionList();
 			return;
 		}
 
@@ -522,132 +483,63 @@ class IsomorphView {
 		// Selecting a new isomorph
 		if (this.selectedPattern != null) {
 			this.isomorphDisplays[this.selectedPattern].element.classList.add("selected");
-
 			let leftmostIndex = Infinity;
 			let leftmostIndexMessage = null;
 
-			for (let instance of this.isomorphCalculator.isomorphs[this.selectedPattern].instances) {
-				this.messageView.highlightIsomorph(this.selectedPattern, instance);
-
-				if (this.messageView.messageDisplays[instance[0]].visible && instance[1] < leftmostIndex) {
+			for (let instance of this.generator.isomorphs[this.selectedPattern].instances) {
+				if (instance[1] < leftmostIndex) {
 					leftmostIndex = instance[1];
 					leftmostIndexMessage = instance[0];
 				}
-			}
 
-			for (let similarPattern of this.isomorphCalculator.isomorphs[this.selectedPattern].similarIsomorphs) {
-				for (let instance of this.isomorphCalculator.isomorphs[similarPattern].instances) {
-					this.messageView.highlightSimilarIsomorph(this.selectedPattern, similarPattern, instance);
-
-					if (this.messageView.messageDisplays[instance[0]].visible && instance[1] < leftmostIndex) {
-						leftmostIndex = instance[1];
-						leftmostIndexMessage = instance[0];
+				for (let i = 0; i < pattern.length; i++) {
+					let symbol = pattern[i];
+					if (symbol == ".") {
+						this.app.setLetterStyle(instance[0], instance[1] + i, { ...Styles.StandardBright, highlighted: true });
+					} else {
+						let value = symbol.charCodeAt(0) - 64;
+						this.app.setLetterStyle(instance[0], instance[1] + i, { ...Styles.indexed(value), highlighted: true });
 					}
 				}
 			}
 
 			// Scroll to leftmost visible instance
-			const letterElement = this.messageView.messageDisplays[leftmostIndexMessage].letters[leftmostIndex];
-			this.messageView.scrollTo(letterElement);
-		}
-
-		this.updateIsomorphSelectionList();
-	}
-
-	updateIsomorphSelectionList() {
-		if (this.selectedPattern == null) {
-			this.isomorphsSelectionListElement.innerHTML = "<div class='empty'>No isomorphs...</div>";
-			this.isomorphsSelectionPatternContainerElement.style.display = "none";
-			return;
-		}
-
-		this.isomorphsSelectionListElement.innerHTML = "";
-		this.isomorphsSelectionPatternContainerElement.style.display = "block";
-		this.isomorphsSelectionPatternElement.innerText = this.selectedPattern;
-
-		for (let instance of this.isomorphCalculator.isomorphs[this.selectedPattern].instances) {
-			const selectionMessageElement = document.createElement("div");
-			selectionMessageElement.classList.toggle("selection-message");
-
-			const selectionMessageIndicesElement = document.createElement("div");
-			selectionMessageIndicesElement.classList.toggle("selection-message-indices");
-			selectionMessageIndicesElement.innerHTML = `${instance[0]}:${instance[1] + 1}-${instance[1] + this.selectedPattern.length}`;
-
-			selectionMessageElement.appendChild(selectionMessageIndicesElement);
-
-			for (let i = 0; i < this.selectedPattern.length; i++) {
-				const value = this.messageView.messagesParsed[instance[0]][instance[1] + i];
-
-				let letterElement = document.createElement("div");
-				letterElement.classList.toggle("selection-letter");
-				letterElement.textContent = this.messageView.showASCII ? String.fromCharCode(value + 32) : value;
-
-				let colours = getColours(this.selectedPattern[i]);
-				letterElement.style.backgroundColor = colours.bg;
-				letterElement.style.color = colours.fg;
-
-				selectionMessageElement.appendChild(letterElement);
-			}
-
-			selectionMessageElement.onclick = (e) => {
-				e.preventDefault();
-				const element = this.messageView.messageDisplays[instance[0]].letters[instance[1]];
-				this.messageView.scrollTo(element);
-			};
-
-			this.isomorphsSelectionListElement.appendChild(selectionMessageElement);
-		}
-
-		// A.BB.A similar [ A....A ]
-		// A....A similar [ A.BB.A ]
-
-		for (let similarPattern of this.isomorphCalculator.isomorphs[this.selectedPattern].similarIsomorphs) {
-			for (let instance of this.isomorphCalculator.isomorphs[similarPattern].instances) {
-				const selectionMessageElement = document.createElement("div");
-				selectionMessageElement.classList.toggle("selection-message");
-
-				for (let i = 0; i < this.selectedPattern.length; i++) {
-					let letterElement = document.createElement("div");
-					const value = this.messageView.messagesParsed[instance[0]][instance[1] + i];
-					letterElement.textContent = this.messageView.showASCII ? String.fromCharCode(value + 32) : value;
-
-					if ((this.selectedPattern[i] == ".") != (similarPattern[i] == ".")) {
-						letterElement.classList.add("warning");
-					} else {
-						let colours = getColours(this.selectedPattern[i]);
-						letterElement.style.backgroundColor = colours.bg;
-						letterElement.style.color = colours.fg;
-					}
-
-					letterElement.onclick = (e) => {
-						e.preventDefault();
-						const element = this.messageView.messageDisplays[instance[0]].letters[instance[1]];
-						this.messageView.scrollTo(element);
-					};
-
-					selectionMessageElement.appendChild(letterElement);
-				}
-
-				this.isomorphsSelectionListElement.appendChild(selectionMessageElement);
-			}
+			const letterElement = this.app.messageListRows[leftmostIndexMessage].letters[leftmostIndex];
+			this.app.scrollTo(letterElement);
 		}
 	}
 }
 
-class MessagesInspector {
-	constructor(msgs) {
+class EyeInspectorApp {
+	constructor(messages) {
+		this.messages = messages;
+		this.highlightMode = null;
+		this.showAscii = false;
+		this.isTightSpacing = false;
+		this.isFullscreen = false;
+		this.isIsomorphsConfigVisible = false;
+		this.isIsomorphsInspectorVisible = false;
+
+		// Setup sub elements
+		this.isomorphGenerator = new IsomorphGenerator(this);
+		this.isomorphInspector = new IsomorphInspector(this, this.isomorphGenerator);
+
+		// Grab general element references
+		this.panelContentElement = document.getElementById("messages-panel-content");
 		this.messageListElement = document.getElementById("messages-list");
 		this.messagesColumnIndicesElement = document.getElementById("messages-column-indices");
 		this.messagesRowIndicesElement = document.getElementById("messages-row-indices");
+		this.isomorphsConfigElement = document.getElementById("isomorph-generator");
+		this.isomorphsInspectorElement = document.getElementById("isomorphs-inspector");
 
 		// Setup toolbar
 		this.highlightButtonElements = {
 			[HighlightMode.None]: document.getElementById("toggle-highlight-none-button"),
 			[HighlightMode.Values]: document.getElementById("toggle-highlight-values-button"),
 			[HighlightMode.SharedCT]: document.getElementById("toggle-highlight-shared-ct-button"),
-			[HighlightMode.SharedPT]: document.getElementById("toggle-highlight-shared-pt-button"),
 			[HighlightMode.Isomorphs]: document.getElementById("toggle-highlight-isomorphs-button"),
 			[HighlightMode.Allomorphs]: document.getElementById("toggle-highlight-allomorphs-button"),
+			[HighlightMode.SharedPT]: document.getElementById("toggle-highlight-shared-pt-button"),
 		};
 
 		this.showAsciiButtonElement = document.getElementById("toggle-show-ascii-button");
@@ -661,24 +553,22 @@ class MessagesInspector {
 		this.tightSpacingButtonElement.onclick = () => this.toggleTightSpacing();
 		this.fullscreenButtonElement.onclick = () => this.toggleFullscreen();
 
-		this.highlightMode = null;
-		this.showAscii = false;
-		this.tightSpacing = false;
-		this.fullscreen = false;
+		// Setup config
+		this.configPanelEmptyElement = document.getElementById("config-panel-empty");
+		this.inspectorPanelEmptyElement = document.getElementById("inspector-panel-empty");
 
-		// Setup messages
-		this.messages = msgs;
+		// Initialise content
 		this.messagesSharedCT = calculateShared(EYES);
 		this.messagesAllomorphs = calculateAllomorphs(EYES);
-		this.messagesIsomorphs = calculateIsomorphs(EYES, 30);
 
-		// Initialise view
-		this.createMessages();
+		this.recreateMessageElements();
 		this.toggleShowAscii(true);
+		this.isomorphGenerator.generate();
+
 		this.setHighlightMode(HighlightMode.Values);
 	}
 
-	createMessages() {
+	recreateMessageElements() {
 		this.messageListElement.innerHTML = "";
 		this.messagesColumnIndicesElement.innerHTML = "";
 		this.messagesRowIndicesElement.innerHTML = "";
@@ -740,32 +630,40 @@ class MessagesInspector {
 	}
 
 	toggleTightSpacing(value = null) {
-		if (value == null) value = !this.tightSpacing;
-		this.tightSpacing = value;
-		this.tightSpacingButtonElement.classList.toggle("active", this.tightSpacing);
+		if (value == null) value = !this.isTightSpacing;
+		this.isTightSpacing = value;
+		this.tightSpacingButtonElement.classList.toggle("active", this.isTightSpacing);
 
-		document.body.style.setProperty("--message-gap", this.tightSpacing ? "0" : "0.4rem");
-		document.body.classList.toggle("tight-spacing", this.tightSpacing);
+		document.body.style.setProperty("--message-gap", this.isTightSpacing ? "0" : "0.4rem");
+		document.body.classList.toggle("tight-spacing", this.isTightSpacing);
 	}
 
 	toggleFullscreen(value = null) {
-		if (value == null) value = !this.fullscreen;
-		this.fullscreen = value;
+		if (value == null) value = !this.isFullscreen;
+		this.isFullscreen = value;
 
-		this.fullscreenButtonElement.classList.toggle("active", this.fullscreen);
-		document.body.classList.toggle("fullscreen", this.fullscreen);
+		this.fullscreenButtonElement.classList.toggle("active", this.isFullscreen);
+		document.body.classList.toggle("fullscreen", this.isFullscreen);
 	}
 
 	setHighlightMode(mode) {
 		if (mode == this.highlightMode) return;
-
 		this.highlightMode = mode;
+
 		if (mode == HighlightMode.Values) {
-			this.highlightMessagesCategorical(EYES);
+			this.highlightMessages(EYES);
 		} else if (mode == HighlightMode.SharedCT) {
-			this.highlightMessagesCategorical(this.messagesSharedCT, "exclude");
+			this.highlightMessages(this.messagesSharedCT, "exclude");
 		} else {
-			this.unhighlightMessages();
+			this.highlightMessagesUniform(Styles.StandardDark);
+		}
+
+		if (mode == HighlightMode.Isomorphs || mode == HighlightMode.Allomorphs) {
+			this.setIsomorphsConfigVisible(true);
+			this.setIsomorphsInspectorVisible(true);
+		} else {
+			this.setIsomorphsConfigVisible(false);
+			this.setIsomorphsInspectorVisible(false);
 		}
 
 		for (const mode in this.highlightButtonElements) {
@@ -775,7 +673,7 @@ class MessagesInspector {
 
 	// ------------------ Letters ------------------
 
-	highlightMessagesCategorical(values, zeroAction = "include", zeroStyle = Styles.Blank) {
+	highlightMessages(values, zeroAction = "include", zeroStyle = Styles.Disabled) {
 		for (let msg = 0; msg < this.messages.length; msg++) {
 			for (let letter = 0; letter < this.messages[msg].length; letter++) {
 				const value = values[msg][letter];
@@ -788,10 +686,10 @@ class MessagesInspector {
 		}
 	}
 
-	unhighlightMessages() {
+	highlightMessagesUniform(style = Styles.StandardDark) {
 		for (let msg = 0; msg < this.messages.length; msg++) {
 			for (let letter = 0; letter < this.messages[msg].length; letter++) {
-				this.setLetterStyle(msg, letter, Styles.Plain);
+				this.setLetterStyle(msg, letter, style);
 			}
 		}
 	}
@@ -800,11 +698,39 @@ class MessagesInspector {
 		const element = this.messageListRows[msg]?.letters[letter];
 		element.style.backgroundColor = style.bg;
 		element.style.color = style.fg;
+		const highlighted = style.highlighted || false;
+		element.classList.toggle("highlighted", highlighted);
 	}
 
 	onHoverLetter(msg, letter) {}
 
 	onUnhoverLetter(msg, letter) {}
+
+	scrollTo(element) {
+		console.log(element);
+		console.log(element.offsetLeft);
+		this.panelContentElement.scrollLeft = element.offsetLeft - 100;
+	}
+
+	// ------------------ Configs ------------------
+
+	setIsomorphsConfigVisible(visible) {
+		this.isIsomorphsConfigVisible = visible;
+		this.isomorphsConfigElement.style.display = visible ? "flex" : "none";
+
+		let emptyVisible = !this.isIsomorphsConfigVisible;
+		this.configPanelEmptyElement.style.display = emptyVisible ? "block" : "none";
+	}
+
+	// ------------------ Inspectors ------------------
+
+	setIsomorphsInspectorVisible(visible) {
+		this.isIsomorphsInspectorVisible = visible;
+		this.isomorphsInspectorElement.style.display = visible ? "flex" : "none";
+
+		let emptyVisible = !this.isIsomorphsInspectorVisible;
+		this.inspectorPanelEmptyElement.style.display = emptyVisible ? "block" : "none";
+	}
 }
 
-new MessagesInspector(EYES);
+new EyeInspectorApp(EYES);

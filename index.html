@@ -10,7 +10,7 @@
 			<div class="layout-row-1">
 				<div id="messages-panel">
 					<div class="messages-toolbar">
-						<div class="messages-toolbar-label">Options</div>
+						<div class="messages-toolbar-label">Display</div>
 						<div id="toggle-show-ascii-button" class="messages-toolbar-option">ASCII</div>
 						<div id="toggle-tight-spacing-button" class="messages-toolbar-option">Tight</div>
 						<div id="toggle-fullscreen-button" class="messages-toolbar-option">Fullscreen</div>
@@ -19,9 +19,9 @@
 						<div id="toggle-highlight-none-button" class="messages-toolbar-option">None</div>
 						<div id="toggle-highlight-values-button" class="messages-toolbar-option">Values</div>
 						<div id="toggle-highlight-shared-ct-button" class="messages-toolbar-option">Shared CT</div>
-						<div id="toggle-highlight-shared-pt-button" class="messages-toolbar-option">Shared PT</div>
 						<div id="toggle-highlight-isomorphs-button" class="messages-toolbar-option">Isomorphs</div>
 						<div id="toggle-highlight-allomorphs-button" class="messages-toolbar-option">Allomorphs</div>
+						<div id="toggle-highlight-shared-pt-button" class="messages-toolbar-option">Shared PT</div>
 					</div>
 
 					<div id="messages-panel-content">
@@ -35,8 +35,38 @@
 			</div>
 
 			<div class="layout-row-2">
-				<div id="config-panel"></div>
-				<div id="inspect-panel"></div>
+				<div id="config-panel">
+					<div id="config-panel-empty">No config available.</div>
+
+					<div id="isomorph-generator" style="display: none">
+						<div class="isomorph-generator-option">
+							<div class="label">Max Length</div>
+							<input type="text" id="isomorph-generator-input-max-length" value="30" />
+						</div>
+						<div class="isomorph-generator-option">
+							<div class="label">Min Values</div>
+							<input type="text" id="isomorph-generator-input-min-values" value="2" />
+						</div>
+						<div class="isomorph-generator-option">
+							<div class="label">Shared Sections</div>
+							<input type="checkbox" id="isomorph-generator-input-shared-sections" />
+						</div>
+						<div id="isomorph-generator-generate-button">
+							<div>Generate</div>
+						</div>
+					</div>
+				</div>
+
+				<div id="inspector-panel">
+					<div id="inspector-panel-empty">No inspection available.</div>
+
+					<div id="isomorphs-inspector" style="display: none;">
+						<div id="isomorphs-inspector-info"></div>
+						<div id="isomorphs-inspector-list">
+							<div class="empty">No isomorphs...</div>
+						</div>
+					</div>
+				</div>
 			</div>
 		</div>
 
