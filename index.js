@@ -53,7 +53,7 @@ class Styles {
 	static StandardDark = { bg: null, fg: "#ffffff" };
 	static StandardBright = { bg: "#8792a0", fg: "#3c3e3f" };
 
-	static indexed(index) {
+	static getIndexed(index) {
 		const hueOffset = 140;
 		const saturation = 30;
 		const lightness = 50;
@@ -62,6 +62,15 @@ class Styles {
 		const bg = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 		const fg = "#ffffff";
 		return { bg, fg };
+	}
+
+	static getPatternIndexed(symbol) {
+		if (symbol == ".") {
+			return Styles.StandardBright;
+		} else {
+			let value = symbol.charCodeAt(0) - 64;
+			return Styles.getIndexed(value);
+		}
 	}
 }
 
@@ -136,6 +145,9 @@ function calculateIsomorphs(messages, maxLength = 30) {
 				// Now can track the instance of this isomorph
 				if (!isomorphs[pattern]) isomorphs[pattern] = { instances: [] };
 				isomorphs[pattern].instances.push([msgIndex, l0Index]);
+				isomorphs[pattern].repeats = Object.values(letterCounts)
+					.filter((v) => v > 1)
+					.reduce((acc, v) => acc + (v - 1), 0);
 			}
 		}
 	}
@@ -322,6 +334,7 @@ class IsomorphGenerator {
 		this.maxLength = 30;
 		this.minValues = 2;
 		this.allowSharedSections = false;
+		this.isVisible = false;
 
 		this.containerElement = document.getElementById("isomorph-generator");
 		this.generateButtonElement = document.getElementById("isomorph-generator-generate-button");
@@ -346,19 +359,18 @@ class IsomorphGenerator {
 		this.minValues = parseInt(this.inputMinValuesElement.value);
 		this.allowSharedSections = this.inputSharedSectionsElement.checked;
 
+		// Calculate and filter isomorphs
 		this.isomorphs = calculateIsomorphs(this.app.messages, this.maxLength);
-
-		// Filter isomorphs that have:
-		// - At least 2 instances
-		// - At least minValues distinct letters
-		// - At least 2 distinct sequences if allowSharedSections is false
 		for (let pattern in this.isomorphs) {
 			let letterSet = new Set(pattern.split("").filter((char) => char !== "."));
+
+			// At least the minimum repeats
 			if (letterSet.size < this.minValues) {
 				delete this.isomorphs[pattern];
 				continue;
 			}
 
+			// And no shared sections (>1 unique instances)
 			if (!this.allowSharedSections && this.isomorphs[pattern].instances.length > 1) {
 				let sequenceSet = new Set();
 				for (let instance of this.isomorphs[pattern].instances) {
@@ -373,9 +385,9 @@ class IsomorphGenerator {
 			}
 		}
 
-		// Filter out isomorphs with 1 instance if they have no similar isomorphs
+		// And finally filter for > 1 instances again
 		for (let pattern in this.isomorphs) {
-			if (this.isomorphs[pattern].instances.length === 1 && (!this.generateSubPatterns || this.isomorphs[pattern].similarIsomorphs.length === 0)) {
+			if (this.isomorphs[pattern].instances.length === 1) {
 				delete this.isomorphs[pattern];
 			}
 		}
@@ -387,6 +399,11 @@ class IsomorphGenerator {
 	toggleGenerateButtonSpinner(toggle) {
 		this.generateButtonElement.innerHTML = toggle ? "<div class='spinner'></div>" : "<div class='label'>Generate</div>";
 	}
+
+	setVisible(isVisible) {
+		this.isVisible = isVisible;
+		this.containerElement.style.display = isVisible ? "flex" : "none";
+	}
 }
 
 class IsomorphInspector {
@@ -396,9 +413,14 @@ class IsomorphInspector {
 		this.isomorphDisplays = {};
 		this.selectedPattern = null;
 		this.sortedIsomorphs = [];
+		this.isVisible = false;
 
+		this.containerElement = document.getElementById("isomorphs-inspector");
 		this.isomorphListElement = document.getElementById("isomorphs-inspector-list");
-		this.isomorphInfoElement = document.getElementById("isomorphs-inspector-info");
+		this.isomorphListInfoElement = document.getElementById("isomorphs-inspector-list-info");
+		this.selectionElement = document.getElementById("isomorphs-inspector-selection");
+		this.selectionInfoElement = document.getElementById("isomorphs-inspector-selection-info");
+		this.selectionListElement = document.getElementById("isomorphs-inspector-selection-list");
 
 		this.generator.onGenerate = () => this.recreateIsomorphElements();
 	}
@@ -413,7 +435,7 @@ class IsomorphInspector {
 			this.sortedIsomorphs = Object.keys(this.generator.isomorphs).sort((a, b) => this.generator.isomorphs[b].score - this.generator.isomorphs[a].score);
 			this.isomorphListElement.innerHTML = "";
 
-			// Create an element for each isomorph
+			// Create an element for each isomorph with info and pattern
 			for (let pattern of this.sortedIsomorphs) {
 				let isomorphDisplay = {};
 
@@ -426,15 +448,7 @@ class IsomorphInspector {
 
 				isomorphDisplay.labelElement = document.createElement("div");
 				isomorphDisplay.labelElement.classList.add("label");
-				let text = this.generator.isomorphs[pattern].instances.length.toString();
-				if (this.generator.generateSubPatterns && this.generator.isomorphs[pattern].similarIsomorphs.length > 0) {
-					let total = 0;
-					for (let similarPattern of this.generator.isomorphs[pattern].similarIsomorphs) {
-						total += this.generator.isomorphs[similarPattern].instances.length;
-					}
-					text += "(" + total + ")";
-				}
-				isomorphDisplay.labelElement.textContent = text;
+				isomorphDisplay.labelElement.textContent = this.generator.isomorphs[pattern].instances.length.toString();
 
 				isomorphDisplay.scoreElement = document.createElement("div");
 				isomorphDisplay.scoreElement.classList.add("score");
@@ -450,16 +464,17 @@ class IsomorphInspector {
 			}
 		}
 
-		this.isomorphInfoElement.innerHTML = "";
+		// Setup the info for the list
+		this.isomorphListInfoElement.innerHTML = "";
 
 		let infoElement1 = document.createElement("div");
 		infoElement1.textContent = "Total patterns: " + this.sortedIsomorphs.length;
-		this.isomorphInfoElement.appendChild(infoElement1);
+		this.isomorphListInfoElement.appendChild(infoElement1);
 
 		let infoElement2 = document.createElement("div");
 		let totalInstances = Object.values(this.generator.isomorphs).reduce((acc, val) => acc + val.instances.length, 0);
 		infoElement2.textContent = "Total instances: " + totalInstances;
-		this.isomorphInfoElement.appendChild(infoElement2);
+		this.isomorphListInfoElement.appendChild(infoElement2);
 	}
 
 	selectIsomorph(pattern) {
@@ -475,38 +490,91 @@ class IsomorphInspector {
 		// Toggling current isomorph so just deselect
 		if (this.selectedPattern == pattern) {
 			this.selectedPattern = null;
+			this.updateSelectedPatterns();
 			return;
 		}
 
 		this.selectedPattern = pattern;
 
-		// Selecting a new isomorph
+		// Selecting a new isomorphso highlight it and keep track of DOM position
 		if (this.selectedPattern != null) {
 			this.isomorphDisplays[this.selectedPattern].element.classList.add("selected");
 			let leftmostIndex = Infinity;
 			let leftmostIndexMessage = null;
-
 			for (let instance of this.generator.isomorphs[this.selectedPattern].instances) {
 				if (instance[1] < leftmostIndex) {
 					leftmostIndex = instance[1];
 					leftmostIndexMessage = instance[0];
 				}
-
 				for (let i = 0; i < pattern.length; i++) {
-					let symbol = pattern[i];
-					if (symbol == ".") {
-						this.app.setLetterStyle(instance[0], instance[1] + i, { ...Styles.StandardBright, highlighted: true });
-					} else {
-						let value = symbol.charCodeAt(0) - 64;
-						this.app.setLetterStyle(instance[0], instance[1] + i, { ...Styles.indexed(value), highlighted: true });
-					}
+					const style = Styles.getPatternIndexed(pattern[i]);
+					this.app.setLetterStyle(instance[0], instance[1] + i, { ...style, highlighted: true });
 				}
 			}
 
 			// Scroll to leftmost visible instance
-			const letterElement = this.app.messageListRows[leftmostIndexMessage].letters[leftmostIndex];
+			const letterElement = this.app.messageRows[leftmostIndexMessage].letters[leftmostIndex];
 			this.app.scrollTo(letterElement);
 		}
+
+		this.updateSelectedPatterns();
+	}
+
+	updateSelectedPatterns() {
+		if (this.selectedPattern == null) {
+			this.selectionElement.style.display = "none";
+			return;
+		}
+
+		this.selectionListElement.innerHTML = "";
+		this.selectionElement.style.display = "flex";
+
+		// Create a selectable element for each instance
+		const isomorph = this.generator.isomorphs[this.selectedPattern];
+		for (let instance of isomorph.instances) {
+			const selectionMessageElement = document.createElement("div");
+			selectionMessageElement.classList.toggle("selection-message");
+			this.selectionListElement.appendChild(selectionMessageElement);
+
+			// Create the indices info text first
+			const selectionMessageIndicesElement = document.createElement("div");
+			selectionMessageIndicesElement.classList.toggle("selection-message-indices");
+			selectionMessageIndicesElement.innerHTML = `message ${instance[0]} (${instance[1]} - ${instance[1] + this.selectedPattern.length - 1})`;
+			selectionMessageElement.appendChild(selectionMessageIndicesElement);
+
+			// Then an element for each letter
+			for (let i = 0; i < this.selectedPattern.length; i++) {
+				const value = this.app.messages[instance[0]][instance[1] + i];
+				const style = Styles.getPatternIndexed(this.selectedPattern[i]);
+				let letterElement = document.createElement("div");
+				letterElement.classList.toggle("selection-letter");
+				letterElement.textContent = this.app.showAscii ? String.fromCharCode(value + 32) : value;
+				letterElement.style.backgroundColor = style.bg;
+				letterElement.style.color = style.fg;
+				letterElement.classList.toggle("highlighted");
+				selectionMessageElement.appendChild(letterElement);
+			}
+
+			selectionMessageElement.onclick = (e) => {
+				e.preventDefault();
+				const element = this.app.messageRows[instance[0]].letters[instance[1]];
+				this.app.scrollTo(element);
+			};
+		}
+
+		// Setup the info for the selection
+
+		this.selectionInfoElement.innerHTML = `
+			<div>Length: ${this.selectedPattern.length}</div>
+			<div>Repeats: ${isomorph.repeats}</div>
+			<div>Instances: ${isomorph.instances.length}</div>
+			<div>Score: ${isomorph.score.toFixed(2)}</div>
+		`;
+	}
+
+	setVisible(isVisible) {
+		this.isVisible = isVisible;
+		this.containerElement.style.display = isVisible ? "flex" : "none";
 	}
 }
 
@@ -517,8 +585,6 @@ class EyeInspectorApp {
 		this.showAscii = false;
 		this.isTightSpacing = false;
 		this.isFullscreen = false;
-		this.isIsomorphsConfigVisible = false;
-		this.isIsomorphsInspectorVisible = false;
 
 		// Setup sub elements
 		this.isomorphGenerator = new IsomorphGenerator(this);
@@ -572,7 +638,7 @@ class EyeInspectorApp {
 		this.messageListElement.innerHTML = "";
 		this.messagesColumnIndicesElement.innerHTML = "";
 		this.messagesRowIndicesElement.innerHTML = "";
-		this.messageListRows = [];
+		this.messageRows = [];
 		this.maxLength = 0;
 
 		for (let msgIndex = 0; msgIndex < this.messages.length; msgIndex++) {
@@ -596,7 +662,7 @@ class EyeInspectorApp {
 			}
 
 			this.messageListElement.appendChild(msgRow.element);
-			this.messageListRows.push(msgRow);
+			this.messageRows.push(msgRow);
 
 			// Create index element for each row
 			let rowIndexElement = document.createElement("div");
@@ -605,6 +671,7 @@ class EyeInspectorApp {
 		}
 
 		// Create index element for each column
+		this.messagesColumnIndicesElement.appendChild(document.createElement("div"));
 		for (let i = 0; i < this.maxLength; i++) {
 			let rowIndexElement = document.createElement("div");
 			rowIndexElement.textContent = i.toString();
@@ -622,11 +689,13 @@ class EyeInspectorApp {
 
 		for (let msg = 0; msg < this.messages.length; msg++) {
 			for (let letter = 0; letter < this.messages[msg].length; letter++) {
-				const element = this.messageListRows[msg]?.letters[letter];
+				const element = this.messageRows[msg]?.letters[letter];
 				const value = this.messages[msg][letter];
 				element.textContent = this.showAscii ? String.fromCharCode(value + 32) : value;
 			}
 		}
+
+		this.isomorphInspector.updateSelectedPatterns();
 	}
 
 	toggleTightSpacing(value = null) {
@@ -653,6 +722,7 @@ class EyeInspectorApp {
 		if (mode == HighlightMode.Values) {
 			this.highlightMessages(EYES);
 		} else if (mode == HighlightMode.SharedCT) {
+			this.highlightMessagesUniform(Styles.Disabled);
 			this.highlightMessages(this.messagesSharedCT, "exclude");
 		} else {
 			this.highlightMessagesUniform(Styles.StandardDark);
@@ -678,9 +748,9 @@ class EyeInspectorApp {
 			for (let letter = 0; letter < this.messages[msg].length; letter++) {
 				const value = values[msg][letter];
 				if (value == 0 && zeroAction == "exclude") {
-					this.setLetterStyle(msg, letter, zeroStyle);
 				} else {
-					this.setLetterStyle(msg, letter, Styles.indexed(value));
+					this.setLetterStyle(msg, letter, zeroStyle);
+					this.setLetterStyle(msg, letter, Styles.getIndexed(value));
 				}
 			}
 		}
@@ -695,40 +765,34 @@ class EyeInspectorApp {
 	}
 
 	setLetterStyle(msg, letter, style) {
-		const element = this.messageListRows[msg]?.letters[letter];
+		const element = this.messageRows[msg]?.letters[letter];
 		element.style.backgroundColor = style.bg;
 		element.style.color = style.fg;
 		const highlighted = style.highlighted || false;
 		element.classList.toggle("highlighted", highlighted);
 	}
 
+	scrollTo(element) {
+		this.panelContentElement.scrollLeft = element.offsetLeft - 100;
+	}
+
 	onHoverLetter(msg, letter) {}
 
 	onUnhoverLetter(msg, letter) {}
 
-	scrollTo(element) {
-		console.log(element);
-		console.log(element.offsetLeft);
-		this.panelContentElement.scrollLeft = element.offsetLeft - 100;
-	}
-
 	// ------------------ Configs ------------------
 
 	setIsomorphsConfigVisible(visible) {
-		this.isIsomorphsConfigVisible = visible;
-		this.isomorphsConfigElement.style.display = visible ? "flex" : "none";
-
-		let emptyVisible = !this.isIsomorphsConfigVisible;
+		this.isomorphGenerator.setVisible(visible);
+		let emptyVisible = !this.isomorphGenerator.isVisible;
 		this.configPanelEmptyElement.style.display = emptyVisible ? "block" : "none";
 	}
 
 	// ------------------ Inspectors ------------------
 
 	setIsomorphsInspectorVisible(visible) {
-		this.isIsomorphsInspectorVisible = visible;
-		this.isomorphsInspectorElement.style.display = visible ? "flex" : "none";
-
-		let emptyVisible = !this.isIsomorphsInspectorVisible;
+		this.isomorphInspector.setVisible(visible);
+		let emptyVisible = !this.isomorphInspector.isVisible;
 		this.inspectorPanelEmptyElement.style.display = emptyVisible ? "block" : "none";
 	}
 }
