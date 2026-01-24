@@ -64,6 +64,29 @@ class Styles {
 		return { bg, fg };
 	}
 
+	static getGreenGradual(pct) {
+		pct = Math.max(0, Math.min(1, pct));
+		const hue = 60 + pct * 60;
+		const saturation = 20 + pct * 10;
+		const lightness = 65 - pct * 20;
+		const bg = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+		const fg = lightness > 50 ? "#2b2b2b" : "#ffffff";
+		return { bg, fg };
+	}
+
+	static getRedToGreen(pct) {
+		pct = Math.max(0, Math.min(1, pct));
+
+		// (0 -> 120) is (red -> yellow -> green)
+		const hue = 120 * pct;
+		const saturation = 80;
+		const lightness = 50;
+
+		const bg = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+		const fg = "#000000";
+		return { bg, fg };
+	}
+
 	static getPatternIndexed(symbol) {
 		if (symbol == ".") {
 			return Styles.StandardBright;
@@ -92,9 +115,32 @@ class IdTracker {
 	}
 }
 
-const HighlightMode = Object.fromEntries(["None", "Values", "SharedCT", "Isomorphs", "Allomorphs", "SharedPT"].map((k, i) => [k, i]));
+class MyEvent {
+	constructor() {
+		this.listeners = [];
+	}
 
-// --------------------------------------------------------------------
+	listen(cb) {
+		this.listeners.push(cb);
+	}
+
+	trigger(...data) {
+		for (var l of this.listeners) {
+			l(...data);
+		}
+	}
+}
+
+const HighlightMode = Object.fromEntries(["None", "Values", "SharedCT", "Isomorphs", "SharedPT"].map((k, i) => [k, i]));
+
+function hashString(str) {
+	let h = 0;
+	for (let i = 0; i < str.length; i++) {
+		h = (h << 5) - h + str.charCodeAt(i); // h * 31 + c
+		h |= 0; // 32-bit
+	}
+	return h >>> 0; // unsigned
+}
 
 function choose(n, k) {
 	// n choose k binomial coefficient
@@ -197,15 +243,11 @@ function calculateIsomorphs(messages, maxLength = 30) {
 }
 
 function calculateAllomorphs(messages) {
-	// { msg: letters[ allomorphs[ {gap,msg,letter} ] ] }
-	let allomorphs = {};
+	let allomorphs = [];
 
 	// Setup allomorph data
-	for (let msgIndex in messages) {
-		allomorphs[msgIndex] = [];
-		for (let _ in messages[msgIndex]) {
-			allomorphs[msgIndex].push([]);
-		}
+	for (let _ in messages) {
+		allomorphs.push({});
 	}
 
 	// For each repeat (l0 -> l1)
@@ -220,8 +262,9 @@ function calculateAllomorphs(messages) {
 
 				if (l0 == l1) {
 					const gap = l1Index - l0Index;
+					allomorphs[msg0Index][l0Index] = { length: gap, instances: [] };
 
-					// For each conflicting repeat (l2 -> l3)
+					// For each other possible range (l2 -> l3) with same length
 					for (let msg1Index = 0; msg1Index < messages.length; msg1Index++) {
 						let msg1 = messages[msg1Index];
 
@@ -232,9 +275,14 @@ function calculateAllomorphs(messages) {
 								let l3Index = l2Index + gap;
 								let l3 = msg1[l3Index];
 
+								// Same message and overlapping is useless information
+								if (msg0Index == msg1Index && ((l0Index < l2Index && l1Index > l2Index) || (l0Index < l3Index && l1Index > l3Index))) {
+									continue;
+								}
+
+								// If (l0 == l1) and (l2 != l3) then this is an allomorph
 								if (l2 != l3) {
-									allomorphs[msg0Index][l0Index].push({ gap, msg: msg1Index, letter: l2Index });
-									allomorphs[msg1Index][l2Index].push({ gap, msg: msg0Index, letter: l0Index });
+									allomorphs[msg0Index][l0Index].instances.push({ msg: msg1Index, letter: l2Index });
 								}
 							}
 						}
@@ -244,20 +292,6 @@ function calculateAllomorphs(messages) {
 		}
 	}
 
-	return allomorphs;
-}
-
-function getAllomorphsForPosition(allAllomorphs, msgIndex, lIndex) {
-	// For each conflict that includes this letter index
-	let allomorphs = [];
-	for (let fromIndex = 0; fromIndex < lIndex; fromIndex++) {
-		const possibleConflicts = allAllomorphs[msgIndex][fromIndex];
-		for (let conflict of possibleConflicts) {
-			if (conflict.gap >= lIndex - fromIndex) {
-				allomorphs.push(conflict);
-			}
-		}
-	}
 	return allomorphs;
 }
 
@@ -330,9 +364,9 @@ class IsomorphGenerator {
 	constructor(app) {
 		this.app = app;
 		this.isomorphs = {};
-		this.onGenerate = null;
+		this.onGenerate = new MyEvent();
 		this.maxLength = 30;
-		this.minValues = 2;
+		this.minValues = 5;
 		this.allowSharedSections = false;
 		this.isVisible = false;
 
@@ -393,7 +427,7 @@ class IsomorphGenerator {
 		}
 
 		this.toggleGenerateButtonSpinner(false);
-		if (this.onGenerate) this.onGenerate(this.isomorphs);
+		this.onGenerate.trigger(this.isomorphs);
 	}
 
 	toggleGenerateButtonSpinner(toggle) {
@@ -422,11 +456,14 @@ class IsomorphInspector {
 		this.selectionInfoElement = document.getElementById("isomorphs-inspector-selection-info");
 		this.selectionListElement = document.getElementById("isomorphs-inspector-selection-list");
 
-		this.generator.onGenerate = () => this.recreateIsomorphElements();
+		this.generator.onGenerate.listen(() => this.recreateIsomorphElements());
+
+		this.app.onShowAsciiChanged.listen(() => {
+			this.updateSelectedPatterns();
+		});
 	}
 
-	recreateIsomorphElements(isomorphs) {
-		this.sortedIsomorphs = [];
+	recreateIsomorphElements() {
 		this.selectIsomorph(null);
 
 		if (Object.keys(this.generator.isomorphs).length == 0) {
@@ -478,7 +515,7 @@ class IsomorphInspector {
 	}
 
 	selectIsomorph(pattern) {
-		this.app.highlightMessagesUniform(Styles.Disabled);
+		if (!this.isVisible) return;
 
 		// Remove old isomorph highlighting
 		if (this.selectedPattern != null) {
@@ -490,14 +527,17 @@ class IsomorphInspector {
 		// Toggling current isomorph so just deselect
 		if (this.selectedPattern == pattern) {
 			this.selectedPattern = null;
+			this.app.highlightMessagesUniform(Styles.Disabled);
 			this.updateSelectedPatterns();
 			return;
 		}
 
 		this.selectedPattern = pattern;
 
-		// Selecting a new isomorphso highlight it and keep track of DOM position
+		// Selecting a new isomorph so highlight it and keep track of DOM position
 		if (this.selectedPattern != null) {
+			this.app.highlightMessagesUniform(Styles.Disabled);
+
 			this.isomorphDisplays[this.selectedPattern].element.classList.add("selected");
 			let leftmostIndex = Infinity;
 			let leftmostIndexMessage = null;
@@ -513,8 +553,10 @@ class IsomorphInspector {
 			}
 
 			// Scroll to leftmost visible instance
-			const letterElement = this.app.messageRows[leftmostIndexMessage].letters[leftmostIndex];
+			const letterElement = this.app.messageDisplays[leftmostIndexMessage].letters[leftmostIndex];
 			this.app.scrollTo(letterElement);
+		} else {
+			this.app.highlightMessagesUniform(Styles.StandardDark);
 		}
 
 		this.updateSelectedPatterns();
@@ -557,7 +599,7 @@ class IsomorphInspector {
 
 			selectionMessageElement.onclick = (e) => {
 				e.preventDefault();
-				const element = this.app.messageRows[instance[0]].letters[instance[1]];
+				const element = this.app.messageDisplays[instance[0]].letters[instance[1]];
 				this.app.scrollTo(element);
 			};
 		}
@@ -575,6 +617,183 @@ class IsomorphInspector {
 	setVisible(isVisible) {
 		this.isVisible = isVisible;
 		this.containerElement.style.display = isVisible ? "flex" : "none";
+
+		if (isVisible) {
+			// Re-highlight existing isomorph
+			if (this.selectedPattern != null) {
+				const pattern = this.selectedPattern;
+				this.selectedPattern = null;
+				this.selectIsomorph(pattern);
+			} else {
+				this.app.highlightMessagesUniform(Styles.StandardDark);
+			}
+		}
+	}
+}
+
+class SharedPTInspector {
+	constructor(app, generator) {
+		this.app = app;
+		this.generator = generator;
+		this.isomorphDisplays = {};
+		this.selectedPatterns = {};
+		this.sortedIsomorphs = [];
+		this.isVisible = false;
+
+		this.containerElement = document.getElementById("shared-pt-inspector");
+		this.isomorphListElement = document.getElementById("shared-pt-inspector-list");
+		this.isomorphListInfoElement = document.getElementById("shared-pt-inspector-list-info");
+
+		this.generator.onGenerate.listen(() => this.recreateIsomorphElements());
+	}
+
+	recreateIsomorphElements() {
+		this.selectedPatterns = {};
+
+		if (Object.keys(this.generator.isomorphs).length == 0) {
+			this.isomorphListElement.innerHTML = "<div class='empty'>No isomorphs...</div>";
+		} else {
+			this.sortedIsomorphs = Object.keys(this.generator.isomorphs).sort((a, b) => this.generator.isomorphs[b].score - this.generator.isomorphs[a].score);
+			this.isomorphListElement.innerHTML = "";
+
+			// Create an element for each isomorph with info and pattern
+			for (let pattern of this.sortedIsomorphs) {
+				let isomorphDisplay = {};
+
+				isomorphDisplay.element = document.createElement("div");
+				isomorphDisplay.element.classList.add("isomorph");
+
+				isomorphDisplay.patternElement = document.createElement("div");
+				isomorphDisplay.patternElement.classList.add("pattern");
+				isomorphDisplay.patternElement.textContent = pattern;
+
+				isomorphDisplay.labelElement = document.createElement("div");
+				isomorphDisplay.labelElement.classList.add("label");
+				isomorphDisplay.labelElement.textContent = this.generator.isomorphs[pattern].instances.length.toString();
+
+				isomorphDisplay.scoreElement = document.createElement("div");
+				isomorphDisplay.scoreElement.classList.add("score");
+				isomorphDisplay.scoreElement.textContent = this.generator.isomorphs[pattern].score.toFixed(2);
+
+				isomorphDisplay.element.appendChild(isomorphDisplay.patternElement);
+				isomorphDisplay.element.appendChild(isomorphDisplay.labelElement);
+				isomorphDisplay.element.appendChild(isomorphDisplay.scoreElement);
+				isomorphDisplay.element.onclick = () => this.selectIsomorph(pattern);
+
+				this.isomorphListElement.appendChild(isomorphDisplay.element);
+				this.isomorphDisplays[pattern] = isomorphDisplay;
+			}
+		}
+
+		// Setup the info for the list
+		this.isomorphListInfoElement.innerHTML = "";
+
+		let infoElement1 = document.createElement("div");
+		infoElement1.textContent = "Total patterns: " + this.sortedIsomorphs.length;
+		this.isomorphListInfoElement.appendChild(infoElement1);
+
+		let infoElement2 = document.createElement("div");
+		let totalInstances = Object.values(this.generator.isomorphs).reduce((acc, val) => acc + val.instances.length, 0);
+		infoElement2.textContent = "Total instances: " + totalInstances;
+		this.isomorphListInfoElement.appendChild(infoElement2);
+	}
+
+	selectIsomorph(pattern) {
+		if (this.selectedPatterns[pattern]) {
+			this.isomorphDisplays[pattern].element.classList.remove("selected");
+			delete this.selectedPatterns[pattern];
+		} else {
+			this.isomorphDisplays[pattern].element.classList.add("selected");
+			const isomorph = this.generator.isomorphs;
+			this.selectedPatterns[pattern] = isomorph;
+		}
+		this.calculateAndHighlight();
+	}
+
+	calculateAndHighlight() {
+		if (!this.isVisible) return;
+
+		if (Object.keys(this.selectedPatterns).length == 0) {
+			this.app.highlightMessagesUniform(Styles.StandardDark);
+			return;
+		}
+
+		this.app.highlightMessagesUniform(Styles.Disabled);
+
+		// // Setup the highlighting data
+		// let highlights = [];
+		// for (let msgIndex in this.app.messages) {
+		// 	highlights.push([]);
+		// 	for (let _ in this.app.messages[msgIndex]) {
+		// 		highlights[msgIndex].push(0);
+		// 	}
+		// }
+		// // Track each instance onto the messages
+		// for (let pattern in this.selectedPatterns) {
+		// 	for (let instance of this.generator.isomorphs[pattern].instances) {
+		// 		for (let i = 0; i < pattern.length; i++) {
+		// 			highlights[instance[0]][instance[1] + i]++;
+		// 		}
+		// 	}
+		// }
+		// // Finally update the message highlights
+		// for (let msg = 0; msg < this.app.messages.length; msg++) {
+		// 	for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
+		// 		const value = highlights[msg][letter];
+		// 		if (value > 0) {
+		// 			this.app.setLetterStyle(msg, letter, Styles.getIndexed(value));
+		// 		}
+		// 	}
+		// }
+
+		// Setup the highlighting data
+		let multiHighlights = [];
+		for (let msgIndex in this.app.messages) {
+			multiHighlights.push([]);
+			for (let _ in this.app.messages[msgIndex]) {
+				multiHighlights[msgIndex].push([]);
+			}
+		}
+		// Track each instance onto the messages
+		for (let pattern in this.selectedPatterns) {
+			let value = hashString(pattern);
+			let style = Styles.getIndexed(value);
+			this.isomorphDisplays[pattern].patternElement.style.backgroundColor = style.bg;
+			for (let instance of this.generator.isomorphs[pattern].instances) {
+				for (let i = 0; i < pattern.length; i++) {
+					multiHighlights[instance[0]][instance[1] + i].push(value);
+				}
+			}
+		}
+		// Finally update the message highlights
+		for (let msg = 0; msg < this.app.messages.length; msg++) {
+			for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
+				const values = multiHighlights[msg][letter];
+				const element = this.app.messageDisplays[msg]?.letters[letter];
+				const colours = values.map((value) => Styles.getIndexed(value).bg);
+
+				if (colours.length === 1) {
+					element.style.background = colours[0];
+				} else {
+					const step = 100 / colours.length;
+					const stops = colours.map((c, i) => {
+						const from = i * step;
+						const to = (i + 1) * step;
+						return `${c} ${from}% ${to}%`;
+					});
+					element.style.background = `linear-gradient(0deg, ${stops.join(", ")})`;
+				}
+			}
+		}
+	}
+
+	setVisible(isVisible) {
+		this.isVisible = isVisible;
+		this.containerElement.style.display = isVisible ? "flex" : "none";
+
+		if (isVisible) {
+			this.calculateAndHighlight();
+		}
 	}
 }
 
@@ -585,10 +804,14 @@ class EyeInspectorApp {
 		this.showAscii = false;
 		this.isTightSpacing = false;
 		this.isFullscreen = false;
+		this.onShowAsciiChanged = new MyEvent();
 
 		// Setup sub elements
 		this.isomorphGenerator = new IsomorphGenerator(this);
 		this.isomorphInspector = new IsomorphInspector(this, this.isomorphGenerator);
+		this.sharedPTInspector = new SharedPTInspector(this, this.isomorphGenerator);
+		this.currentConfigPanel = null;
+		this.currentInspectorPanel = null;
 
 		// Grab general element references
 		this.panelContentElement = document.getElementById("messages-panel-content");
@@ -604,7 +827,6 @@ class EyeInspectorApp {
 			[HighlightMode.Values]: document.getElementById("toggle-highlight-values-button"),
 			[HighlightMode.SharedCT]: document.getElementById("toggle-highlight-shared-ct-button"),
 			[HighlightMode.Isomorphs]: document.getElementById("toggle-highlight-isomorphs-button"),
-			[HighlightMode.Allomorphs]: document.getElementById("toggle-highlight-allomorphs-button"),
 			[HighlightMode.SharedPT]: document.getElementById("toggle-highlight-shared-pt-button"),
 		};
 
@@ -626,9 +848,9 @@ class EyeInspectorApp {
 		// Initialise content
 		this.messagesSharedCT = calculateShared(EYES);
 		this.messagesAllomorphs = calculateAllomorphs(EYES);
-
 		this.recreateMessageElements();
 		this.toggleShowAscii(true);
+
 		this.isomorphGenerator.generate();
 
 		this.setHighlightMode(HighlightMode.Values);
@@ -638,17 +860,17 @@ class EyeInspectorApp {
 		this.messageListElement.innerHTML = "";
 		this.messagesColumnIndicesElement.innerHTML = "";
 		this.messagesRowIndicesElement.innerHTML = "";
-		this.messageRows = [];
+		this.messageDisplays = [];
 		this.maxLength = 0;
 
 		for (let msgIndex = 0; msgIndex < this.messages.length; msgIndex++) {
 			this.maxLength = Math.max(this.maxLength, this.messages[msgIndex].length);
 
-			let msgRow = {};
-			msgRow.letters = [];
-			msgRow.index = msgIndex;
-			msgRow.element = document.createElement("div");
-			msgRow.element.classList.add("message");
+			let msgDisplay = {};
+			msgDisplay.letters = [];
+			msgDisplay.index = msgIndex;
+			msgDisplay.element = document.createElement("div");
+			msgDisplay.element.classList.add("message");
 
 			// Create element for each letter in each row
 			for (let lIndex = 0; lIndex < this.messages[msgIndex].length; lIndex++) {
@@ -657,12 +879,12 @@ class EyeInspectorApp {
 				letterElement.onmouseenter = () => this.onHoverLetter(msgIndex, lIndex);
 				letterElement.onmouseleave = () => this.onUnhoverLetter(msgIndex, lIndex);
 
-				msgRow.element.appendChild(letterElement);
-				msgRow.letters.push(letterElement);
+				msgDisplay.element.appendChild(letterElement);
+				msgDisplay.letters.push(letterElement);
 			}
 
-			this.messageListElement.appendChild(msgRow.element);
-			this.messageRows.push(msgRow);
+			this.messageListElement.appendChild(msgDisplay.element);
+			this.messageDisplays.push(msgDisplay);
 
 			// Create index element for each row
 			let rowIndexElement = document.createElement("div");
@@ -671,7 +893,6 @@ class EyeInspectorApp {
 		}
 
 		// Create index element for each column
-		this.messagesColumnIndicesElement.appendChild(document.createElement("div"));
 		for (let i = 0; i < this.maxLength; i++) {
 			let rowIndexElement = document.createElement("div");
 			rowIndexElement.textContent = i.toString();
@@ -689,21 +910,19 @@ class EyeInspectorApp {
 
 		for (let msg = 0; msg < this.messages.length; msg++) {
 			for (let letter = 0; letter < this.messages[msg].length; letter++) {
-				const element = this.messageRows[msg]?.letters[letter];
+				const element = this.messageDisplays[msg]?.letters[letter];
 				const value = this.messages[msg][letter];
 				element.textContent = this.showAscii ? String.fromCharCode(value + 32) : value;
 			}
 		}
 
-		this.isomorphInspector.updateSelectedPatterns();
+		this.onShowAsciiChanged.trigger(this.showAscii);
 	}
 
 	toggleTightSpacing(value = null) {
 		if (value == null) value = !this.isTightSpacing;
 		this.isTightSpacing = value;
 		this.tightSpacingButtonElement.classList.toggle("active", this.isTightSpacing);
-
-		document.body.style.setProperty("--message-gap", this.isTightSpacing ? "0" : "0.4rem");
 		document.body.classList.toggle("tight-spacing", this.isTightSpacing);
 	}
 
@@ -719,6 +938,7 @@ class EyeInspectorApp {
 		if (mode == this.highlightMode) return;
 		this.highlightMode = mode;
 
+		// Handle the highlight modes without an inspector
 		if (mode == HighlightMode.Values) {
 			this.highlightMessages(EYES);
 		} else if (mode == HighlightMode.SharedCT) {
@@ -728,14 +948,27 @@ class EyeInspectorApp {
 			this.highlightMessagesUniform(Styles.StandardDark);
 		}
 
-		if (mode == HighlightMode.Isomorphs || mode == HighlightMode.Allomorphs) {
-			this.setIsomorphsConfigVisible(true);
-			this.setIsomorphsInspectorVisible(true);
-		} else {
-			this.setIsomorphsConfigVisible(false);
-			this.setIsomorphsInspectorVisible(false);
+		// Change and update the config and inspector panels
+		if (this.currentConfigPanel != null) this.currentConfigPanel.setVisible(false);
+		if (this.currentInspectorPanel != null) this.currentInspectorPanel.setVisible(false);
+
+		this.currentConfigPanel = null;
+		this.currentInspectorPanel = null;
+		if (mode == HighlightMode.Isomorphs) {
+			this.currentConfigPanel = this.isomorphGenerator;
+			this.currentInspectorPanel = this.isomorphInspector;
+		} else if (mode == HighlightMode.SharedPT) {
+			this.currentConfigPanel = this.isomorphGenerator;
+			this.currentInspectorPanel = this.sharedPTInspector;
 		}
 
+		if (this.currentConfigPanel != null) this.currentConfigPanel.setVisible(true);
+		if (this.currentInspectorPanel != null) this.currentInspectorPanel.setVisible(true);
+
+		this.configPanelEmptyElement.style.display = this.currentConfigPanel == null ? "block" : "none";
+		this.inspectorPanelEmptyElement.style.display = this.currentInspectorPanel == null ? "block" : "none";
+
+		// And finally update the highlight mode buttons
 		for (const mode in this.highlightButtonElements) {
 			this.highlightButtonElements[mode].classList.toggle("active", mode == this.highlightMode);
 		}
@@ -748,8 +981,8 @@ class EyeInspectorApp {
 			for (let letter = 0; letter < this.messages[msg].length; letter++) {
 				const value = values[msg][letter];
 				if (value == 0 && zeroAction == "exclude") {
-				} else {
 					this.setLetterStyle(msg, letter, zeroStyle);
+				} else {
 					this.setLetterStyle(msg, letter, Styles.getIndexed(value));
 				}
 			}
@@ -765,7 +998,8 @@ class EyeInspectorApp {
 	}
 
 	setLetterStyle(msg, letter, style) {
-		const element = this.messageRows[msg]?.letters[letter];
+		const element = this.messageDisplays[msg]?.letters[letter];
+		element.style.background = "";
 		element.style.backgroundColor = style.bg;
 		element.style.color = style.fg;
 		const highlighted = style.highlighted || false;
@@ -779,22 +1013,6 @@ class EyeInspectorApp {
 	onHoverLetter(msg, letter) {}
 
 	onUnhoverLetter(msg, letter) {}
-
-	// ------------------ Configs ------------------
-
-	setIsomorphsConfigVisible(visible) {
-		this.isomorphGenerator.setVisible(visible);
-		let emptyVisible = !this.isomorphGenerator.isVisible;
-		this.configPanelEmptyElement.style.display = emptyVisible ? "block" : "none";
-	}
-
-	// ------------------ Inspectors ------------------
-
-	setIsomorphsInspectorVisible(visible) {
-		this.isomorphInspector.setVisible(visible);
-		let emptyVisible = !this.isomorphInspector.isVisible;
-		this.inspectorPanelEmptyElement.style.display = emptyVisible ? "block" : "none";
-	}
 }
 
 new EyeInspectorApp(EYES);

@@ -20,14 +20,11 @@
 						<div id="toggle-highlight-values-button" class="messages-toolbar-option">Values</div>
 						<div id="toggle-highlight-shared-ct-button" class="messages-toolbar-option">Shared CT</div>
 						<div id="toggle-highlight-isomorphs-button" class="messages-toolbar-option">Isomorphs</div>
-						<div id="toggle-highlight-allomorphs-button" class="messages-toolbar-option">Allomorphs</div>
 						<div id="toggle-highlight-shared-pt-button" class="messages-toolbar-option">Shared PT</div>
 					</div>
 
 					<div id="messages-panel-content">
-						<div id="messages-column-indices">
-							<div></div>
-						</div>
+						<div id="messages-column-indices"></div>
 						<div id="messages-row-indices"></div>
 						<div id="messages-list"></div>
 					</div>
@@ -45,7 +42,7 @@
 						</div>
 						<div class="isomorph-generator-option">
 							<div class="label">Min Values</div>
-							<input type="text" id="isomorph-generator-input-min-values" value="2" />
+							<input type="text" id="isomorph-generator-input-min-values" value="5" />
 						</div>
 						<div class="isomorph-generator-option">
 							<div class="label">Shared Sections</div>
@@ -62,11 +59,18 @@
 
 					<div id="isomorphs-inspector" style="display: none">
 						<div id="isomorphs-inspector-selection">
-							<div id="isomorphs-inspector-selection-info" class="isomorph-inspector-info"></div>
+							<div id="isomorphs-inspector-selection-info" class="inspector-info-row"></div>
 							<div id="isomorphs-inspector-selection-list"></div>
 						</div>
-						<div id="isomorphs-inspector-list-info" class="isomorph-inspector-info"></div>
+						<div id="isomorphs-inspector-list-info" class="inspector-info-row"></div>
 						<div id="isomorphs-inspector-list">
+							<div class="empty">No isomorphs...</div>
+						</div>
+					</div>
+
+					<div id="shared-pt-inspector" style="display: none">
+						<div id="shared-pt-inspector-list-info" class="inspector-info-row"></div>
+						<div id="shared-pt-inspector-list">
 							<div class="empty">No isomorphs...</div>
 						</div>
 					</div>
