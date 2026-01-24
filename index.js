@@ -142,6 +142,20 @@ function hashString(str) {
 	return h >>> 0; // unsigned
 }
 
+function hashInts(list) {
+	let h = 0;
+	for (const v of list) h ^= v;
+	return h >>> 0;
+}
+
+function hashStrings(list) {
+	let h = 0;
+	for (const s of list) {
+		h ^= hashString(s);
+	}
+	return h >>> 0;
+}
+
 function choose(n, k) {
 	// n choose k binomial coefficient
 	if (k > n / 2) k = n - k;
@@ -720,68 +734,78 @@ class SharedPTInspector {
 
 		this.app.highlightMessagesUniform(Styles.Disabled);
 
-		// // Setup the highlighting data
-		// let highlights = [];
-		// for (let msgIndex in this.app.messages) {
-		// 	highlights.push([]);
-		// 	for (let _ in this.app.messages[msgIndex]) {
-		// 		highlights[msgIndex].push(0);
-		// 	}
-		// }
-		// // Track each instance onto the messages
-		// for (let pattern in this.selectedPatterns) {
-		// 	for (let instance of this.generator.isomorphs[pattern].instances) {
-		// 		for (let i = 0; i < pattern.length; i++) {
-		// 			highlights[instance[0]][instance[1] + i]++;
-		// 		}
-		// 	}
-		// }
-		// // Finally update the message highlights
-		// for (let msg = 0; msg < this.app.messages.length; msg++) {
-		// 	for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
-		// 		const value = highlights[msg][letter];
-		// 		if (value > 0) {
-		// 			this.app.setLetterStyle(msg, letter, Styles.getIndexed(value));
-		// 		}
-		// 	}
-		// }
-
-		// Setup the highlighting data
-		let multiHighlights = [];
-		for (let msgIndex in this.app.messages) {
-			multiHighlights.push([]);
-			for (let _ in this.app.messages[msgIndex]) {
-				multiHighlights[msgIndex].push([]);
+		if (false) {
+			// Setup the highlighting data
+			let highlights = [];
+			for (let msgIndex in this.app.messages) {
+				highlights.push([]);
+				for (let _ in this.app.messages[msgIndex]) {
+					highlights[msgIndex].push([]);
+				}
 			}
-		}
-		// Track each instance onto the messages
-		for (let pattern in this.selectedPatterns) {
-			let value = hashString(pattern);
-			let style = Styles.getIndexed(value);
-			this.isomorphDisplays[pattern].patternElement.style.backgroundColor = style.bg;
-			for (let instance of this.generator.isomorphs[pattern].instances) {
-				for (let i = 0; i < pattern.length; i++) {
-					multiHighlights[instance[0]][instance[1] + i].push(value);
+
+			// Track each instance onto the messages
+			for (let pattern in this.selectedPatterns) {
+				let hash = hashString(pattern);
+				for (let instance of this.generator.isomorphs[pattern].instances) {
+					for (let i = 0; i < pattern.length; i++) {
+						highlights[instance[0]][instance[1] + i].push(hash);
+					}
+				}
+			}
+
+			// Finally update the message highlights
+			for (let msg = 0; msg < this.app.messages.length; msg++) {
+				for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
+					const values = highlights[msg][letter];
+					if (values.length > 0) {
+						const value = hashInts(values);
+						this.app.setLetterStyle(msg, letter, Styles.getIndexed(value));
+					}
 				}
 			}
 		}
-		// Finally update the message highlights
-		for (let msg = 0; msg < this.app.messages.length; msg++) {
-			for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
-				const values = multiHighlights[msg][letter];
-				const element = this.app.messageDisplays[msg]?.letters[letter];
-				const colours = values.map((value) => Styles.getIndexed(value).bg);
 
-				if (colours.length === 1) {
-					element.style.background = colours[0];
-				} else {
-					const step = 100 / colours.length;
-					const stops = colours.map((c, i) => {
-						const from = i * step;
-						const to = (i + 1) * step;
-						return `${c} ${from}% ${to}%`;
-					});
-					element.style.background = `linear-gradient(0deg, ${stops.join(", ")})`;
+		if (true) {
+			// Setup the highlighting data
+			let multiHighlights = [];
+			for (let msgIndex in this.app.messages) {
+				multiHighlights.push([]);
+				for (let _ in this.app.messages[msgIndex]) {
+					multiHighlights[msgIndex].push([]);
+				}
+			}
+
+			// Track each instance onto the messages
+			for (let pattern in this.selectedPatterns) {
+				let value = hashString(pattern);
+				let style = Styles.getIndexed(value);
+				this.isomorphDisplays[pattern].patternElement.style.backgroundColor = style.bg;
+				for (let instance of this.generator.isomorphs[pattern].instances) {
+					for (let i = 0; i < pattern.length; i++) {
+						multiHighlights[instance[0]][instance[1] + i].push(value);
+					}
+				}
+			}
+
+			// Finally update the message highlights
+			for (let msg = 0; msg < this.app.messages.length; msg++) {
+				for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
+					const values = multiHighlights[msg][letter];
+					const element = this.app.messageDisplays[msg]?.letters[letter];
+					const colours = values.map((value) => Styles.getIndexed(value).bg);
+
+					if (colours.length === 1) {
+						element.style.background = colours[0];
+					} else {
+						const step = 100 / colours.length;
+						const stops = colours.map((c, i) => {
+							const from = i * step;
+							const to = (i + 1) * step;
+							return `${c} ${from}% ${to}%`;
+						});
+						element.style.background = `linear-gradient(0deg, ${stops.join(", ")})`;
+					}
 				}
 			}
 		}
