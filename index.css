@@ -236,8 +236,21 @@ body.fullscreen .layout-row-2 {
 	border-radius: var(--standard-border-radius);
 }
 
+.message div.outlined {
+	border: 1px solid;
+	line-height: calc(var(--message-line-height) - 2px);
+}
+
 .message div.highlighted {
 	box-shadow: 0 0 0.4rem 0.05rem rgba(0, 0, 0, 0.2);
+}
+
+#messages-list.clickable-letters .message div {
+	cursor: pointer;
+}
+
+#messages-list.clickable-letters .message div:hover {
+	filter: brightness(1.1);
 }
 
 body.tight-spacing #messages-row-indices,

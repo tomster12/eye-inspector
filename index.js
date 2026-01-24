@@ -166,34 +166,40 @@ function choose(n, k) {
 	return res;
 }
 
-function calculateIsomorphs(messages, maxLength = 30) {
+function calculateIsomorphs(messages, maxLength = 30, toExtend = true) {
 	// pattern: { instances: [ [message, letter], ... ], score: 0 }
 	let isomorphs = {};
 
-	// For each (l0 + pattern length)
-	for (let patternLength = 2; patternLength <= maxLength; patternLength++) {
+	// For each length to try, check every letter on every message
+	for (let len = 2; len <= maxLength; len++) {
 		for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
-			for (let l0Index = 0; l0Index < messages[msgIndex].length - patternLength + 1; l0Index++) {
-				let instance = messages[msgIndex].slice(l0Index, l0Index + patternLength);
+			let msg = messages[msgIndex];
+			for (let i = 0; i < msg.length - len + 1; i++) {
+				let instance = msg.slice(i, i + len);
 
-				// Start and end values must have a repeat within the range
-				if (instance[0] != instance[instance.length - 1]) {
-					let foundStart = false;
-					let foundEnd = false;
-					for (let i = 1; i < instance.length - 1; i++) {
-						if (instance[i] == instance[0]) foundStart = true;
-						if (instance[i] == instance[instance.length - 1]) foundEnd = true;
-						if (foundStart && foundEnd) break;
+				// Optionally filter on start and end values having a repeat within the range
+				if (!toExtend) {
+					const start = instance[0];
+					const end = instance[instance.length - 1];
+					if (start != end) {
+						let foundStart = false;
+						let foundEnd = false;
+						for (let i = 1; i < instance.length - 1; i++) {
+							if (instance[i] == start) foundStart = true;
+							if (instance[i] == end) foundEnd = true;
+							if (foundStart && foundEnd) break;
+						}
+						if (!(foundStart && foundEnd)) continue;
 					}
-					if (!(foundStart && foundEnd)) continue;
 				}
 
-				// Get pattern of letters that have repeats
+				// Get pattern of letters based on their repeat structure
 				let letterMapping = {};
 				let letterCounts = {};
 				for (let letter of instance) {
 					letterCounts[letter] = (letterCounts[letter] || 0) + 1;
 				}
+
 				let pattern = "";
 				for (let letter of instance) {
 					if (letterCounts[letter] > 1 && !letterMapping[letter]) {
@@ -202,21 +208,51 @@ function calculateIsomorphs(messages, maxLength = 30) {
 					pattern += letterMapping[letter] || ".";
 				}
 
-				// Now can track the instance of this isomorph
-				if (!isomorphs[pattern]) isomorphs[pattern] = { instances: [] };
-				isomorphs[pattern].instances.push([msgIndex, l0Index]);
-				isomorphs[pattern].repeats = Object.values(letterCounts)
-					.filter((v) => v > 1)
-					.reduce((acc, v) => acc + (v - 1), 0);
+				// Now can track the instance of this isomorph to the pattern lookup
+				if (Object.keys(letterMapping).length > 0) {
+					if (!isomorphs[pattern]) isomorphs[pattern] = { instances: [] };
+					isomorphs[pattern].instances.push([msgIndex, i]);
+					isomorphs[pattern].repeats = Object.values(letterCounts)
+						.filter((v) => v > 1)
+						.reduce((acc, v) => acc + (v - 1), 0);
+				}
 			}
 		}
 	}
 
-	// Requirements for score calculation
+	// If we are extending we want to merge all patterns by their core pattern and take the largest
+	if (toExtend) {
+		const uniquePatterns = {};
+		for (let pattern in isomorphs) {
+			// Strip away outermost .'s to find core
+			let start = 0;
+			let end = pattern.length - 1;
+			while (start <= end && pattern[start] === ".") start++;
+			while (end >= start && pattern[end] === ".") end--;
+			const corePattern = pattern.slice(start, end + 1);
+
+			// Use count in the key as larger extensions may have less instances
+			const counts = isomorphs[pattern].instances.length;
+			const key = corePattern + ":" + counts;
+			if (!uniquePatterns[key] || pattern.length > uniquePatterns[key].maxLength) {
+				uniquePatterns[key] = { pattern, maxLength: pattern.length, counts };
+			}
+		}
+
+		// Now grab the encompassing isomorphs for each core isomorph
+		const mergedIsomorphs = {};
+		for (let key in uniquePatterns) {
+			const p = uniquePatterns[key].pattern;
+			mergedIsomorphs[p] = isomorphs[p];
+		}
+
+		isomorphs = mergedIsomorphs;
+	}
+
+	// Calculate score for each isomorph group
 	const alphabetSize = new Set(messages.flat()).size;
 	const totalMessageLength = messages.reduce((acc, msg) => acc + msg.length, 0);
 
-	// Calculate score for each isomorph group
 	for (let pattern in isomorphs) {
 		const isomorph = isomorphs[pattern];
 		const isomorphLength = pattern.length;
@@ -235,7 +271,11 @@ function calculateIsomorphs(messages, maxLength = 30) {
 			}
 		}
 
-		if (internalRepeatCount === 1) continue;
+		if (internalRepeatCount === 1) {
+			isomorph.score = 0;
+			continue;
+		}
+
 		const isoProbability = 1 / Math.pow(alphabetSize, internalRepeatCount);
 
 		// Assume binomially distributed occurrences across the length of the message
@@ -541,7 +581,7 @@ class IsomorphInspector {
 		// Toggling current isomorph so just deselect
 		if (this.selectedPattern == pattern) {
 			this.selectedPattern = null;
-			this.app.highlightMessagesUniform(Styles.Disabled);
+			this.app.highlightMessagesUniform(Styles.StandardDark);
 			this.updateSelectedPatterns();
 			return;
 		}
@@ -653,12 +693,18 @@ class SharedPTInspector {
 		this.selectedPatterns = {};
 		this.sortedIsomorphs = [];
 		this.isVisible = false;
+		this.selectedPosition = null;
 
 		this.containerElement = document.getElementById("shared-pt-inspector");
 		this.isomorphListElement = document.getElementById("shared-pt-inspector-list");
 		this.isomorphListInfoElement = document.getElementById("shared-pt-inspector-list-info");
 
 		this.generator.onGenerate.listen(() => this.recreateIsomorphElements());
+
+		this.app.onLetterClick.listen((msg, letter) => {
+			if (!this.isVisible) return;
+			this.selectLetter([msg, letter]);
+		});
 	}
 
 	recreateIsomorphElements() {
@@ -722,6 +768,46 @@ class SharedPTInspector {
 			this.selectedPatterns[pattern] = isomorph;
 		}
 		this.calculateAndHighlight();
+		this.selectLetter(null);
+	}
+
+	selectLetter(position) {
+		// Remove outline from old position
+		if (this.selectedPosition != null) {
+			this.app.messageDisplays[this.selectedPosition[0]].letters[this.selectedPosition[1]].classList.toggle("outlined", false);
+		}
+
+		// Either toggle or replace with new position
+		if (this.selectedPosition != null && position != null && this.selectedPosition[0] == position[0] && this.selectedPosition[1] == position[1]) {
+			this.selectedPosition = null;
+		} else {
+			this.selectedPosition = position;
+			if (this.selectedPosition != null) {
+				this.app.messageDisplays[this.selectedPosition[0]].letters[this.selectedPosition[1]].classList.toggle("outlined", true);
+			}
+		}
+
+		// Not selecting anything so enable all isomorphs
+		if (this.selectedPosition == null) {
+			for (let pattern in this.isomorphDisplays) {
+				this.isomorphDisplays[pattern].element.style.display = "flex";
+			}
+			return;
+		}
+
+		// Filter visible isormorphs to only those including the position
+		for (let pattern in this.isomorphDisplays) {
+			let included = false;
+			for (let i = 0; i < this.generator.isomorphs[pattern].instances.length; i++) {
+				const instance = this.generator.isomorphs[pattern].instances[i];
+				if (instance[0] == this.selectedPosition[0] && instance[1] < this.selectedPosition[1] && instance[1] + pattern.length > this.selectedPosition[1]) {
+					included = true;
+					break;
+				}
+			}
+
+			this.isomorphDisplays[pattern].element.style.display = included ? "flex" : "none";
+		}
 	}
 
 	calculateAndHighlight() {
@@ -822,6 +908,8 @@ class SharedPTInspector {
 		if (isVisible) {
 			this.calculateAndHighlight();
 		}
+
+		this.app.messageListElement.classList.toggle("clickable-letters", isVisible);
 	}
 }
 
@@ -832,7 +920,9 @@ class EyeInspectorApp {
 		this.showAscii = false;
 		this.isTightSpacing = false;
 		this.isFullscreen = false;
+
 		this.onShowAsciiChanged = new MyEvent();
+		this.onLetterClick = new MyEvent();
 
 		// Setup sub elements
 		this.isomorphGenerator = new IsomorphGenerator(this);
@@ -904,8 +994,7 @@ class EyeInspectorApp {
 			for (let lIndex = 0; lIndex < this.messages[msgIndex].length; lIndex++) {
 				let letterElement = document.createElement("div");
 				letterElement.textContent = this.messages[msgIndex][lIndex];
-				letterElement.onmouseenter = () => this.onHoverLetter(msgIndex, lIndex);
-				letterElement.onmouseleave = () => this.onUnhoverLetter(msgIndex, lIndex);
+				letterElement.onclick = () => this.onLetterClick.trigger(msgIndex, lIndex);
 
 				msgDisplay.element.appendChild(letterElement);
 				msgDisplay.letters.push(letterElement);
@@ -1037,10 +1126,6 @@ class EyeInspectorApp {
 	scrollTo(element) {
 		this.panelContentElement.scrollLeft = element.offsetLeft - 100;
 	}
-
-	onHoverLetter(msg, letter) {}
-
-	onUnhoverLetter(msg, letter) {}
 }
 
 new EyeInspectorApp(EYES);
