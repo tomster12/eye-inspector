@@ -51,14 +51,19 @@ const EYES = [
 class Styles {
 	static Disabled = { bg: null, fg: null };
 	static StandardDark = { bg: null, fg: "#ffffff" };
-	static StandardBright = { bg: "#8792a0", fg: "#3c3e3f" };
+	static StandardBright = { bg: "#77818d", fg: "#494c4d" };
 
-	static getIndexed(index) {
+	static getIndexed(index, modifier = null) {
 		const hueOffset = 140;
-		const saturation = 30;
-		const lightness = 50;
-
 		const hue = (hueOffset + index * 137.508) % 360;
+
+		let saturation = 30;
+		let lightness = 50;
+		if (modifier == "darken") {
+			lightness = Math.max(0, lightness - 15);
+			saturation = Math.min(100, saturation - 5);
+		}
+
 		const bg = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 		const fg = "#ffffff";
 		return { bg, fg };
@@ -166,6 +171,19 @@ function choose(n, k) {
 	return res;
 }
 
+function getCorePatternIndices(pattern) {
+	let start = 0;
+	let end = pattern.length - 1;
+	while (start <= end && pattern[start] === ".") start++;
+	while (end >= start && pattern[end] === ".") end--;
+	return [start, end];
+}
+
+function getCorePattern(pattern) {
+	let [start, end] = getCorePatternIndices(pattern);
+	return pattern.slice(start, end + 1);
+}
+
 function calculateIsomorphs(messages, maxLength = 30, toExtend = true) {
 	// pattern: { instances: [ [message, letter], ... ], score: 0 }
 	let isomorphs = {};
@@ -224,16 +242,11 @@ function calculateIsomorphs(messages, maxLength = 30, toExtend = true) {
 	if (toExtend) {
 		const uniquePatterns = {};
 		for (let pattern in isomorphs) {
-			// Strip away outermost .'s to find core
-			let start = 0;
-			let end = pattern.length - 1;
-			while (start <= end && pattern[start] === ".") start++;
-			while (end >= start && pattern[end] === ".") end--;
-			const corePattern = pattern.slice(start, end + 1);
-
 			// Use count in the key as larger extensions may have less instances
+			let corePattern = getCorePattern(pattern);
 			const counts = isomorphs[pattern].instances.length;
 			const key = corePattern + ":" + counts;
+
 			if (!uniquePatterns[key] || pattern.length > uniquePatterns[key].maxLength) {
 				uniquePatterns[key] = { pattern, maxLength: pattern.length, counts };
 			}
@@ -506,6 +519,7 @@ class IsomorphInspector {
 		this.selectedPattern = null;
 		this.sortedIsomorphs = [];
 		this.isVisible = false;
+		this.selectedPosition = null;
 
 		this.containerElement = document.getElementById("isomorphs-inspector");
 		this.isomorphListElement = document.getElementById("isomorphs-inspector-list");
@@ -518,6 +532,11 @@ class IsomorphInspector {
 
 		this.app.onShowAsciiChanged.listen(() => {
 			this.updateSelectedPatterns();
+		});
+
+		this.app.onLetterClick.listen((msg, letter) => {
+			if (!this.isVisible) return;
+			this.selectLetter([msg, letter]);
 		});
 	}
 
@@ -595,29 +614,57 @@ class IsomorphInspector {
 		// Selecting a new isomorph so highlight it and keep track of DOM position
 		if (this.selectedPattern != null) {
 			this.app.highlightMessagesUniform(Styles.Disabled);
-
 			this.isomorphDisplays[this.selectedPattern].element.classList.add("selected");
-			let leftmostIndex = Infinity;
-			let leftmostIndexMessage = null;
 			for (let instance of this.generator.isomorphs[this.selectedPattern].instances) {
-				if (instance[1] < leftmostIndex) {
-					leftmostIndex = instance[1];
-					leftmostIndexMessage = instance[0];
-				}
 				for (let i = 0; i < pattern.length; i++) {
 					const style = Styles.getPatternIndexed(pattern[i]);
 					this.app.setLetterStyle(instance[0], instance[1] + i, { ...style, highlighted: true });
 				}
 			}
-
-			// Scroll to leftmost visible instance
-			const letterElement = this.app.messageDisplays[leftmostIndexMessage].letters[leftmostIndex];
-			this.app.scrollTo(letterElement);
 		} else {
 			this.app.highlightMessagesUniform(Styles.StandardDark);
 		}
 
 		this.updateSelectedPatterns();
+	}
+
+	selectLetter(position) {
+		// Remove outline from old position
+		if (this.selectedPosition != null) {
+			this.app.messageDisplays[this.selectedPosition[0]].letters[this.selectedPosition[1]].classList.toggle("outlined", false);
+		}
+
+		// Either toggle or replace with new position
+		if (this.selectedPosition != null && position != null && this.selectedPosition[0] == position[0] && this.selectedPosition[1] == position[1]) {
+			this.selectedPosition = null;
+		} else {
+			this.selectedPosition = position;
+			if (this.selectedPosition != null) {
+				this.app.messageDisplays[this.selectedPosition[0]].letters[this.selectedPosition[1]].classList.toggle("outlined", true);
+			}
+		}
+
+		// Not selecting anything so enable all isomorphs
+		if (this.selectedPosition == null) {
+			for (let pattern in this.isomorphDisplays) {
+				this.isomorphDisplays[pattern].element.style.display = "flex";
+			}
+			return;
+		}
+
+		// Filter visible isormorphs to only those including the position
+		for (let pattern in this.isomorphDisplays) {
+			let included = false;
+			for (let i = 0; i < this.generator.isomorphs[pattern].instances.length; i++) {
+				const instance = this.generator.isomorphs[pattern].instances[i];
+				if (instance[0] == this.selectedPosition[0] && instance[1] < this.selectedPosition[1] && instance[1] + pattern.length > this.selectedPosition[1]) {
+					included = true;
+					break;
+				}
+			}
+
+			this.isomorphDisplays[pattern].element.style.display = included ? "flex" : "none";
+		}
 	}
 
 	updateSelectedPatterns() {
@@ -675,6 +722,7 @@ class IsomorphInspector {
 	setVisible(isVisible) {
 		this.isVisible = isVisible;
 		this.containerElement.style.display = isVisible ? "flex" : "none";
+		this.selectLetter(null);
 
 		if (isVisible) {
 			// Re-highlight existing isomorph
@@ -686,6 +734,7 @@ class IsomorphInspector {
 				this.app.highlightMessagesUniform(Styles.StandardDark);
 			}
 		}
+		this.app.messageListElement.classList.toggle("clickable-letters", isVisible);
 	}
 }
 
@@ -772,7 +821,6 @@ class SharedPTInspector {
 			this.selectedPatterns[pattern] = isomorph;
 		}
 		this.calculateAndHighlight();
-		this.selectLetter(null);
 	}
 
 	selectLetter(position) {
@@ -874,10 +922,12 @@ class SharedPTInspector {
 			for (let pattern in this.selectedPatterns) {
 				let value = hashString(pattern);
 				let style = Styles.getIndexed(value);
+				let coreIndices = getCorePatternIndices(pattern);
 				this.isomorphDisplays[pattern].patternElement.style.backgroundColor = style.bg;
 				for (let instance of this.generator.isomorphs[pattern].instances) {
 					for (let i = 0; i < pattern.length; i++) {
-						multiHighlights[instance[0]][instance[1] + i].push(value);
+						const isCore = i >= coreIndices[0] && i <= coreIndices[1];
+						multiHighlights[instance[0]][instance[1] + i].push(isCore ? value : -value);
 					}
 				}
 			}
@@ -887,7 +937,7 @@ class SharedPTInspector {
 				for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
 					const values = multiHighlights[msg][letter];
 					const element = this.app.messageDisplays[msg]?.letters[letter];
-					const colours = values.map((value) => Styles.getIndexed(value).bg);
+					const colours = values.map((value) => (value > 0 ? Styles.getIndexed(value).bg : Styles.getIndexed(-value, "darken").bg));
 
 					if (colours.length === 1) {
 						element.style.background = colours[0];
@@ -908,6 +958,7 @@ class SharedPTInspector {
 	setVisible(isVisible) {
 		this.isVisible = isVisible;
 		this.containerElement.style.display = isVisible ? "flex" : "none";
+		this.selectLetter(null);
 
 		if (isVisible) {
 			this.calculateAndHighlight();

@@ -237,8 +237,8 @@ body.fullscreen .layout-row-2 {
 }
 
 .message div.outlined {
-	border: 1px solid;
-	line-height: calc(var(--message-line-height) - 2px);
+	border: 2px solid white;
+	line-height: calc(var(--message-line-height) - 4px);
 }
 
 .message div.highlighted {
