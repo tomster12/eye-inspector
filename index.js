@@ -419,9 +419,6 @@ class IsomorphGenerator {
 		this.app = app;
 		this.isomorphs = {};
 		this.onGenerate = new MyEvent();
-		this.maxLength = 30;
-		this.minValues = 3;
-		this.allowSharedSections = false;
 		this.isVisible = false;
 
 		this.containerElement = document.getElementById("isomorph-generator");
@@ -429,6 +426,12 @@ class IsomorphGenerator {
 		this.inputMaxLengthElement = document.getElementById("isomorph-generator-input-max-length");
 		this.inputMinValuesElement = document.getElementById("isomorph-generator-input-min-values");
 		this.inputSharedSectionsElement = document.getElementById("isomorph-generator-input-shared-sections");
+		this.inputExtendElement = document.getElementById("isomorph-generator-input-extend");
+
+		this.maxLength = parseInt(this.inputMaxLengthElement.value);
+		this.minValues = parseInt(this.inputMinValuesElement.value);
+		this.sharedSections = this.inputSharedSectionsElement.checked;
+		this.toExtend = this.inputExtendElement.checked;
 
 		this.containerElement.addEventListener("keypress", (evt) => {
 			if (evt.keyCode === 13) {
@@ -445,10 +448,11 @@ class IsomorphGenerator {
 
 		this.maxLength = parseInt(this.inputMaxLengthElement.value);
 		this.minValues = parseInt(this.inputMinValuesElement.value);
-		this.allowSharedSections = this.inputSharedSectionsElement.checked;
+		this.sharedSections = this.inputSharedSectionsElement.checked;
+		this.toExtend = this.inputExtendElement.checked;
 
 		// Calculate and filter isomorphs
-		this.isomorphs = calculateIsomorphs(this.app.messages, this.maxLength);
+		this.isomorphs = calculateIsomorphs(this.app.messages, this.maxLength, this.toExtend);
 		for (let pattern in this.isomorphs) {
 			let letterSet = new Set(pattern.split("").filter((char) => char !== "."));
 
@@ -459,7 +463,7 @@ class IsomorphGenerator {
 			}
 
 			// And no shared sections (>1 unique instances)
-			if (!this.allowSharedSections && this.isomorphs[pattern].instances.length > 1) {
+			if (!this.sharedSections && this.isomorphs[pattern].instances.length > 1) {
 				let sequenceSet = new Set();
 				for (let instance of this.isomorphs[pattern].instances) {
 					const instanceList = this.app.messages[instance[0]].slice(instance[1], instance[1] + pattern.length);
@@ -490,7 +494,7 @@ class IsomorphGenerator {
 
 	setVisible(isVisible) {
 		this.isVisible = isVisible;
-		this.containerElement.style.display = isVisible ? "flex" : "none";
+		this.containerElement.style.display = isVisible ? "block" : "none";
 	}
 }
 
@@ -936,7 +940,6 @@ class EyeInspectorApp {
 		this.messageListElement = document.getElementById("messages-list");
 		this.messagesColumnIndicesElement = document.getElementById("messages-column-indices");
 		this.messagesRowIndicesElement = document.getElementById("messages-row-indices");
-		this.isomorphsConfigElement = document.getElementById("isomorph-generator");
 		this.isomorphsInspectorElement = document.getElementById("isomorphs-inspector");
 
 		// Setup toolbar

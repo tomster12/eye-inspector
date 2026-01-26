@@ -279,14 +279,24 @@ body.tight-spacing .message div.highlighted {
 }
 
 #isomorph-generator {
+	flex-shrink: 0;
+	display: block;
+}
+
+#isomorph-generator .content {
 	border-radius: var(--standard-border-radius);
 	background-color: var(--col-fg-panel);
-	flex-shrink: 0;
 	height: fit-content;
 	display: flex;
 	flex-direction: column;
 	gap: calc(var(--standard-padding) * 0.5);
 	padding: var(--standard-padding);
+}
+
+#isomorph-generator .title {
+	font-size: 1rem;
+	color: #c3c3c3;
+	margin-bottom: var(--standard-padding);
 }
 
 #isomorph-generator-generate-button {
