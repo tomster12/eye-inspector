@@ -138,6 +138,16 @@ class MyEvent {
 
 const HighlightMode = Object.fromEntries(["None", "Values", "SharedCT", "Isomorphs", "SharedPT"].map((k, i) => [k, i]));
 
+function unionSets(sets) {
+	return new Set(sets.flatMap((s) => [...s]));
+}
+
+function setsEqual(a, b) {
+	if (a.size !== b.size) return false;
+	for (const v of a) if (!b.has(v)) return false;
+	return true;
+}
+
 function hashString(str) {
 	let h = 0;
 	for (let i = 0; i < str.length; i++) {
@@ -962,53 +972,63 @@ class SharedPTInspectorPanel {
 				}
 			}
 		} else {
-			// Setup the data
-			let sharedValues = [];
-			let highlights = [];
-			for (let msgIndex in this.app.messages) {
-				sharedValues.push([]);
-				highlights.push([]);
-				for (let _ in this.app.messages[msgIndex]) {
-					sharedValues[msgIndex].push([]);
-					highlights[msgIndex].push([]);
-				}
+// Setup the data
+let sharedValues = [];
+for (let msgIndex in this.app.messages) {
+	sharedValues.push([]);
+	for (let _ in this.app.messages[msgIndex]) {
+		sharedValues[msgIndex].push(new Set());
+	}
+}
+
+// Track each isomorph on each cell of the messages
+for (let pattern in this.selectedPatterns) {
+	let value = hashString(pattern);
+	let [c0, c1] = getCorePatternIndices(pattern);
+	for (let instance of this.generator.isomorphs[pattern].instances) {
+		for (let i = c0; i <= c1; i++) {
+			sharedValues[instance[0]][instance[1] + i].add(value);
+		}
+	}
+}
+
+// For each column in each isomorph we need to union all the involved isomorphs
+// We do this iteratively as the isomorphs can affect each other
+let anyChanged = true;
+while (anyChanged) {
+	anyChanged = false;
+	// Check every pattern from the start each iteration
+	for (let pattern in this.selectedPatterns) {
+		let [c0, c1] = getCorePatternIndices(pattern);
+		for (let i = c0; i <= c1; i++) {
+			// Union this column for each instance
+			let columnValues = new Set();
+			for (let instance of this.generator.isomorphs[pattern].instances) {
+				let instanceValues = sharedValues[instance[0]][instance[1] + i];
+				columnValues = unionSets([columnValues, instanceValues]);
 			}
 
-			// Track each isomorph onto the messages
-			for (let pattern in this.selectedPatterns) {
-				let value = hashString(pattern);
-				let [c0, c1] = getCorePatternIndices(pattern);
-				for (let instance of this.generator.isomorphs[pattern].instances) {
-					for (let i = c0; i <= c1; i++) {
-						sharedValues[instance[0]][instance[1] + i].push(value);
-					}
+			// Re-assign the union to each instance
+			for (let instance of this.generator.isomorphs[pattern].instances) {
+				let instanceValues = sharedValues[instance[0]][instance[1] + i];
+				if (!setsEqual(instanceValues, columnValues)) {
+					sharedValues[instance[0]][instance[1] + i] = new Set(columnValues);
+					anyChanged = true;
 				}
 			}
+		}
+	}
+}
 
-			for (let pattern in this.selectedPatterns) {
-				let [c0, c1] = getCorePatternIndices(pattern);
-				for (let i = c0; i <= c1; i++) {
-					let mostComplex = null;
-					for (let instance of this.generator.isomorphs[pattern].instances) {
-						if (sharedValues[instance[0]][instance[1] + i].length > mostComplex) {
-							mostComplex = sharedValues[instance[0]][instance[1] + i];
-						}
-					}
-					const value = hashInts(mostComplex);
-					const style = Styles.getIndexed(value);
-					for (let instance of this.generator.isomorphs[pattern].instances) {
-						highlights[instance[0]][instance[1] + i] = style.bg;
-					}
-				}
-			}
-
-			// Update the message highlights
-			for (let msg = 0; msg < this.app.messages.length; msg++) {
-				for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
-					const elements = this.app.messageDisplays[msg]?.letters[letter];
-					elements.style.background = highlights[msg][letter];
-				}
-			}
+// Now highlight the messages
+for (let msg = 0; msg < this.app.messages.length; msg++) {
+	for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
+		if (sharedValues[msg][letter].size == 0) continue;
+		const value = hashInts(sharedValues[msg][letter]);
+		const elements = this.app.messageDisplays[msg]?.letters[letter];
+		elements.style.background = Styles.getIndexed(value).bg;
+	}
+}
 		}
 	}
 
@@ -1187,6 +1207,9 @@ class EyeInspectorApp {
 		} else if (mode == HighlightMode.SharedPT) {
 			this.setConfigPanels([this.isomorphGenerator, this.sharedPTConfig]);
 			this.setInspectorPanels([this.sharedPTInspector]);
+		} else {
+			this.setConfigPanels([]);
+			this.setInspectorPanels([]);
 		}
 
 		// And finally update the highlight mode buttons
