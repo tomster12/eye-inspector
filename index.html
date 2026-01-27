@@ -32,37 +32,53 @@
 			</div>
 
 			<div class="layout-row-2">
-				<div id="config-panel">
-					<div id="config-panel-empty">No config available.</div>
+				<div id="config-panels">
+					<div id="config-panels-empty">No config available.</div>
 
 					<div id="isomorph-generator" style="display: none">
 						<p class="title">Isomorphs</p>
 						<div class="content">
-							<div class="isomorph-generator-option">
+							<div class="config-option">
 								<div class="label">Max Length</div>
 								<input type="text" id="isomorph-generator-input-max-length" value="50" />
 							</div>
-							<div class="isomorph-generator-option">
+							<div class="config-option">
 								<div class="label">Min Values</div>
-								<input type="text" id="isomorph-generator-input-min-values" value="3" />
+								<input type="text" id="isomorph-generator-input-min-values" value="5" />
 							</div>
-							<div class="isomorph-generator-option">
+							<div class="config-option">
 								<div class="label">Shared Sections</div>
 								<input type="checkbox" id="isomorph-generator-input-shared-sections" checked />
 							</div>
-							<div class="isomorph-generator-option">
+							<div class="config-option">
 								<div class="label">Extend</div>
-								<input type="checkbox" id="isomorph-generator-input-extend" />
+								<input type="checkbox" id="isomorph-generator-input-extend" checked />
 							</div>
-							<div id="isomorph-generator-generate-button">
+							<div id="isomorph-generator-generate-button" class="button">
 								<div>Generate</div>
+							</div>
+						</div>
+					</div>
+
+					<div id="shared-pt-config" style="display: none">
+						<p class="title">Plaintext</p>
+						<div class="content">
+							<div class="config-option">
+								<div class="label">Show Seperated</div>
+								<input type="checkbox" id="shared-pt-config-show-seperated" checked />
+							</div>
+							<div id="shared-pt-config-select-all-button" class="button">
+								<div>Select All</div>
+							</div>
+							<div id="shared-pt-config-deselect-all-button" class="button">
+								<div>Deselect All</div>
 							</div>
 						</div>
 					</div>
 				</div>
 
-				<div id="inspector-panel">
-					<div id="inspector-panel-empty">No inspection available.</div>
+				<div id="inspector-panels">
+					<div id="inspector-panels-empty">No inspection available.</div>
 
 					<div id="isomorphs-inspector" style="display: none">
 						<div id="isomorphs-inspector-selection">

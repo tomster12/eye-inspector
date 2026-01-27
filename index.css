@@ -123,7 +123,7 @@ body.fullscreen .layout-row-2 {
 	background-color: var(--col-bg-panel);
 }
 
-.messages-toolbar {
+#messages-panel .messages-toolbar {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
@@ -131,11 +131,11 @@ body.fullscreen .layout-row-2 {
 	flex-wrap: wrap;
 }
 
-.messages-toolbar-label {
+#messages-panel .messages-toolbar-label {
 	color: var(--col-font-dull-1);
 }
 
-.messages-toolbar-option {
+#messages-panel .messages-toolbar-option {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
@@ -150,15 +150,15 @@ body.fullscreen .layout-row-2 {
 	text-wrap: nowrap;
 }
 
-.messages-toolbar-option.active {
+#messages-panel .messages-toolbar-option.active {
 	background-color: var(--col-bg-toggle-button-active);
 }
 
-.messages-toolbar-option:hover {
+#messages-panel .messages-toolbar-option:hover {
 	background-color: var(--col-bg-toggle-button-hovered);
 }
 
-.messages-toolbar-option-image {
+#messages-panel .messages-toolbar-option-image {
 	flex-shrink: 0;
 	width: var(--message-letter-size);
 	height: var(--message-letter-size);
@@ -181,7 +181,7 @@ body.fullscreen .layout-row-2 {
 	padding-bottom: var(--standard-padding);
 }
 
-#messages-column-indices {
+#messages-panel #messages-column-indices {
 	position: absolute;
 	display: flex;
 	flex-direction: row;
@@ -190,7 +190,7 @@ body.fullscreen .layout-row-2 {
 	padding-left: var(--message-gap);
 }
 
-#messages-row-indices {
+#messages-panel #messages-row-indices {
 	margin-top: var(--message-letter-size);
 	position: sticky;
 	left: 0;
@@ -201,7 +201,7 @@ body.fullscreen .layout-row-2 {
 	background-color: var(--col-fg-panel);
 }
 
-#messages-list {
+#messages-panel #messages-list {
 	margin-top: var(--message-letter-size);
 	display: flex;
 	flex-direction: column;
@@ -210,8 +210,8 @@ body.fullscreen .layout-row-2 {
 	padding-bottom: 0;
 }
 
-#messages-column-indices div,
-#messages-row-indices div {
+#messages-panel #messages-column-indices div,
+#messages-panel #messages-row-indices div {
 	flex-shrink: 0;
 	width: var(--message-letter-size);
 	height: var(--message-letter-size);
@@ -220,12 +220,12 @@ body.fullscreen .layout-row-2 {
 	color: var(--col-font-message-indices);
 }
 
-.message {
+#messages-panel .message {
 	display: flex;
 	gap: var(--message-gap);
 }
 
-.message div {
+#messages-panel .message div {
 	flex-shrink: 0;
 	width: var(--message-letter-size);
 	height: var(--message-letter-size);
@@ -236,54 +236,53 @@ body.fullscreen .layout-row-2 {
 	border-radius: var(--standard-border-radius);
 }
 
-.message div.outlined {
+#messages-panel .message div.outlined {
 	border: 2px solid white;
 	line-height: calc(var(--message-line-height) - 4px);
 }
 
-.message div.highlighted {
+#messages-panel .message div.highlighted {
 	box-shadow: 0 0 0.4rem 0.05rem rgba(0, 0, 0, 0.2);
 }
 
-#messages-list.clickable-letters .message div {
+#messages-panel #messages-list.clickable-letters .message div {
 	cursor: pointer;
 }
 
-#messages-list.clickable-letters .message div:hover {
+#messages-panel #messages-list.clickable-letters .message div:hover {
 	filter: brightness(1.1);
 }
 
-body.tight-spacing #messages-row-indices,
-body.tight-spacing #messages-column-indices,
-body.tight-spacing #messages-list,
-body.tight-spacing .message {
+body.tight-spacing #messages-panel #messages-row-indices,
+body.tight-spacing #messages-panel #messages-column-indices,
+body.tight-spacing #messages-panel #messages-list,
+body.tight-spacing #messages-panel .message {
 	gap: unset;
 }
 
-body.tight-spacing .message div {
+body.tight-spacing #messages-panel .message div {
 	border-radius: unset;
 }
 
-body.tight-spacing .message div.highlighted {
+body.tight-spacing #messages-panel .message div.highlighted {
 	box-shadow: unset;
 }
 
 /* -------------------------------------- Config Panel -------------------------------------- */
 
-#config-panel {
+#config-panels {
 	background-color: var(--col-bg-panel);
 	border-radius: var(--standard-border-radius);
 	padding: var(--standard-padding);
 	color: var(--col-font-dull-2);
 	max-width: 25rem;
+	display: flex;
+	flex-direction: column;
+	gap: var(--standard-padding);
+	overflow-y: auto;
 }
 
-#isomorph-generator {
-	flex-shrink: 0;
-	display: block;
-}
-
-#isomorph-generator .content {
+#config-panels .content {
 	border-radius: var(--standard-border-radius);
 	background-color: var(--col-fg-panel);
 	height: fit-content;
@@ -293,13 +292,47 @@ body.tight-spacing .message div.highlighted {
 	padding: var(--standard-padding);
 }
 
-#isomorph-generator .title {
+#config-panels .title {
 	font-size: 1rem;
 	color: #c3c3c3;
 	margin-bottom: var(--standard-padding);
 }
 
-#isomorph-generator-generate-button {
+#config-panels .config-option {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	max-width: 100%;
+	margin: auto;
+}
+
+#config-panels .config-option .label {
+	color: #c3c3c3;
+	text-wrap: nowrap;
+	padding-right: 0.4rem;
+}
+
+#config-panels .config-option input[type="text"] {
+	width: 5rem;
+	height: 1.7rem;
+	border-radius: var(--standard-border-radius);
+	background-color: var(--col-bg-button);
+	color: black;
+	text-align: center;
+	border: none;
+	outline: none;
+}
+
+#config-panels .config-option input[type="checkbox"] {
+	width: 1.2rem;
+	height: 1.3rem;
+	border-radius: var(--standard-border-radius);
+	background-color: var(--col-bg-button);
+}
+
+#config-panels .button {
 	user-select: none;
 	cursor: pointer;
 	text-align: center;
@@ -314,11 +347,11 @@ body.tight-spacing .message div.highlighted {
 	margin-top: 0.4rem;
 }
 
-#isomorph-generator-generate-button:hover {
+#config-panels .button:hover {
 	background-color: var(--col-bg-button-hovered);
 }
 
-#isomorph-generator-generate-button .spinner {
+#config-panels .button .spinner {
 	width: 1.2rem;
 	height: 1.2rem;
 	border-radius: 50%;
@@ -327,38 +360,9 @@ body.tight-spacing .message div.highlighted {
 	animation: spin 1s linear infinite;
 }
 
-.isomorph-generator-option {
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-	justify-content: space-between;
-	width: 100%;
-	max-width: 100%;
-	margin: auto;
-}
-
-.isomorph-generator-option .label {
-	color: #c3c3c3;
-	text-wrap: nowrap;
-	padding-right: 0.4rem;
-}
-
-.isomorph-generator-option input[type="text"] {
-	width: 5rem;
-	height: 1.7rem;
-	border-radius: var(--standard-border-radius);
-	background-color: var(--col-bg-button);
-	color: black;
-	text-align: center;
-	border: none;
-	outline: none;
-}
-
-.isomorph-generator-option input[type="checkbox"] {
-	width: 1.2rem;
-	height: 1.3rem;
-	border-radius: var(--standard-border-radius);
-	background-color: var(--col-bg-button);
+#config-panels > div {
+	flex-shrink: 0;
+	display: block;
 }
 
 @keyframes spin {
@@ -369,7 +373,7 @@ body.tight-spacing .message div.highlighted {
 
 /* -------------------------------------- Inspect Panel -------------------------------------- */
 
-#inspector-panel {
+#inspector-panels {
 	overflow: hidden;
 	background-color: var(--col-bg-panel);
 	border-radius: var(--standard-border-radius);

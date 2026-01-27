@@ -331,26 +331,26 @@ function calculateAllomorphs(messages) {
 					const gap = l1Index - l0Index;
 					allomorphs[msg0Index][l0Index] = { length: gap, instances: [] };
 
-					// For each other possible range (l2 -> l3) with same length
+					// For each other message in same column  (l2 -> l3) with same length
 					for (let msg1Index = 0; msg1Index < messages.length; msg1Index++) {
 						let msg1 = messages[msg1Index];
+						if (msg0Index == msg1Index) continue;
 
-						for (let l2Index = 0; l2Index < msg1.length; l2Index++) {
-							let l2 = msg1[l2Index];
+						let l2Index = l0Index;
+						let l2 = msg1[l2Index];
 
-							if (l2Index + gap < msg1.length) {
-								let l3Index = l2Index + gap;
-								let l3 = msg1[l3Index];
+						if (l2Index + gap < msg1.length) {
+							let l3Index = l2Index + gap;
+							let l3 = msg1[l3Index];
 
-								// Same message and overlapping is useless information
-								if (msg0Index == msg1Index && ((l0Index < l2Index && l1Index > l2Index) || (l0Index < l3Index && l1Index > l3Index))) {
-									continue;
-								}
+							// Same message and overlapping is useless information
+							if (msg0Index == msg1Index && ((l0Index < l2Index && l1Index > l2Index) || (l0Index < l3Index && l1Index > l3Index))) {
+								continue;
+							}
 
-								// If (l0 == l1) and (l2 != l3) then this is an allomorph
-								if (l2 != l3) {
-									allomorphs[msg0Index][l0Index].instances.push({ msg: msg1Index, letter: l2Index });
-								}
+							// If (l0 == l1) and (l2 != l3) then this is an allomorph
+							if (l2 != l3) {
+								allomorphs[msg0Index][l0Index].instances.push({ msg: msg1Index, letter: l2Index });
 							}
 						}
 					}
@@ -427,7 +427,7 @@ function calculateShared(messages) {
 
 // --------------------------------------------------------------------
 
-class IsomorphGenerator {
+class IsomorphGeneratorPanel {
 	constructor(app) {
 		this.app = app;
 		this.isomorphs = {};
@@ -511,7 +511,27 @@ class IsomorphGenerator {
 	}
 }
 
-class IsomorphInspector {
+class SharedPTConfigPanel {
+	constructor(app) {
+		this.app = app;
+		this.containerElement = document.getElementById("shared-pt-config");
+		this.selectAllButtonElement = document.getElementById("shared-pt-config-select-all-button");
+		this.deselectAllButtonElement = document.getElementById("shared-pt-config-deselect-all-button");
+		this.showSeperatedElement = document.getElementById("shared-pt-config-show-seperated");
+		this.isVisible = false;
+
+		this.selectAllButtonElement.onclick = () => this.app.sharedPTInspector.selectAllIsomorphs();
+		this.deselectAllButtonElement.onclick = () => this.app.sharedPTInspector.deselectAllIsomorphs();
+		this.showSeperatedElement.onchange = (e) => this.app.sharedPTInspector.setShowSeperated(e.target.checked);
+	}
+
+	setVisible(isVisible) {
+		this.isVisible = isVisible;
+		this.containerElement.style.display = isVisible ? "block" : "none";
+	}
+}
+
+class IsomorphInspectorPanel {
 	constructor(app, generator) {
 		this.app = app;
 		this.generator = generator;
@@ -542,6 +562,7 @@ class IsomorphInspector {
 
 	recreateIsomorphElements() {
 		this.selectIsomorph(null);
+		this.isomorphDisplays = {};
 
 		if (Object.keys(this.generator.isomorphs).length == 0) {
 			this.isomorphListElement.innerHTML = "<div class='empty'>No isomorphs...</div>";
@@ -738,7 +759,7 @@ class IsomorphInspector {
 	}
 }
 
-class SharedPTInspector {
+class SharedPTInspectorPanel {
 	constructor(app, generator) {
 		this.app = app;
 		this.generator = generator;
@@ -747,6 +768,7 @@ class SharedPTInspector {
 		this.sortedIsomorphs = [];
 		this.isVisible = false;
 		this.selectedPosition = null;
+		this.showSeperated = this.app.sharedPTConfig.showSeperatedElement.checked;
 
 		this.containerElement = document.getElementById("shared-pt-inspector");
 		this.isomorphListElement = document.getElementById("shared-pt-inspector-list");
@@ -761,7 +783,9 @@ class SharedPTInspector {
 	}
 
 	recreateIsomorphElements() {
+		this.selectLetter(null);
 		this.selectedPatterns = {};
+		this.isomorphDisplays = {};
 
 		if (Object.keys(this.generator.isomorphs).length == 0) {
 			this.isomorphListElement.innerHTML = "<div class='empty'>No isomorphs...</div>";
@@ -809,6 +833,8 @@ class SharedPTInspector {
 		let totalInstances = Object.values(this.generator.isomorphs).reduce((acc, val) => acc + val.instances.length, 0);
 		infoElement2.textContent = "Total instances: " + totalInstances;
 		this.isomorphListInfoElement.appendChild(infoElement2);
+
+		this.calculateAndHighlight();
 	}
 
 	selectIsomorph(pattern) {
@@ -817,8 +843,23 @@ class SharedPTInspector {
 			delete this.selectedPatterns[pattern];
 		} else {
 			this.isomorphDisplays[pattern].element.classList.add("selected");
-			const isomorph = this.generator.isomorphs;
-			this.selectedPatterns[pattern] = isomorph;
+			this.selectedPatterns[pattern] = true;
+		}
+		this.calculateAndHighlight();
+	}
+
+	selectAllIsomorphs() {
+		for (let pattern in this.isomorphDisplays) {
+			this.isomorphDisplays[pattern].element.classList.add("selected");
+			this.selectedPatterns[pattern] = true;
+		}
+		this.calculateAndHighlight();
+	}
+
+	deselectAllIsomorphs() {
+		for (let pattern in this.isomorphDisplays) {
+			this.isomorphDisplays[pattern].element.classList.remove("selected");
+			delete this.selectedPatterns[pattern];
 		}
 		this.calculateAndHighlight();
 	}
@@ -876,49 +917,18 @@ class SharedPTInspector {
 
 		this.app.highlightMessagesUniform(Styles.Disabled);
 
-		if (false) {
-			// Setup the highlighting data
-			let highlights = [];
+		if (this.showSeperated) {
+			// Setup the data
+			let sharedValues = [];
 			for (let msgIndex in this.app.messages) {
-				highlights.push([]);
+				sharedValues.push([]);
 				for (let _ in this.app.messages[msgIndex]) {
-					highlights[msgIndex].push([]);
+					sharedValues[msgIndex].push([]);
 				}
 			}
 
-			// Track each instance onto the messages
-			for (let pattern in this.selectedPatterns) {
-				let hash = hashString(pattern);
-				for (let instance of this.generator.isomorphs[pattern].instances) {
-					for (let i = 0; i < pattern.length; i++) {
-						highlights[instance[0]][instance[1] + i].push(hash);
-					}
-				}
-			}
-
-			// Finally update the message highlights
-			for (let msg = 0; msg < this.app.messages.length; msg++) {
-				for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
-					const values = highlights[msg][letter];
-					if (values.length > 0) {
-						const value = hashInts(values);
-						this.app.setLetterStyle(msg, letter, Styles.getIndexed(value));
-					}
-				}
-			}
-		}
-
-		if (true) {
-			// Setup the highlighting data
-			let multiHighlights = [];
-			for (let msgIndex in this.app.messages) {
-				multiHighlights.push([]);
-				for (let _ in this.app.messages[msgIndex]) {
-					multiHighlights[msgIndex].push([]);
-				}
-			}
-
-			// Track each instance onto the messages
+			// Track each isomorph onto the messages (including if they are core)
+			// Also can draw the colour back to the isomorph display
 			for (let pattern in this.selectedPatterns) {
 				let value = hashString(pattern);
 				let style = Styles.getIndexed(value);
@@ -927,32 +937,84 @@ class SharedPTInspector {
 				for (let instance of this.generator.isomorphs[pattern].instances) {
 					for (let i = 0; i < pattern.length; i++) {
 						const isCore = i >= coreIndices[0] && i <= coreIndices[1];
-						multiHighlights[instance[0]][instance[1] + i].push(isCore ? value : -value);
+						sharedValues[instance[0]][instance[1] + i].push({ isCore, value });
 					}
 				}
 			}
 
-			// Finally update the message highlights
+			// Update the message highlights
 			for (let msg = 0; msg < this.app.messages.length; msg++) {
 				for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
-					const values = multiHighlights[msg][letter];
-					const element = this.app.messageDisplays[msg]?.letters[letter];
-					const colours = values.map((value) => (value > 0 ? Styles.getIndexed(value).bg : Styles.getIndexed(-value, "darken").bg));
-
-					if (colours.length === 1) {
-						element.style.background = colours[0];
+					const values = sharedValues[msg][letter];
+					const elements = this.app.messageDisplays[msg]?.letters[letter];
+					if (values.length === 1) {
+						elements.style.background = Styles.getIndexed(values[0].value, values[0].isCore ? null : "darken").bg;
 					} else {
-						const step = 100 / colours.length;
-						const stops = colours.map((c, i) => {
+						const step = 100 / values.length;
+						const stops = values.map((d, i) => {
+							const c = Styles.getIndexed(d.value, d.isCore ? null : "darken").bg;
 							const from = i * step;
 							const to = (i + 1) * step;
 							return `${c} ${from}% ${to}%`;
 						});
-						element.style.background = `linear-gradient(0deg, ${stops.join(", ")})`;
+						elements.style.background = `linear-gradient(0deg, ${stops.join(", ")})`;
 					}
 				}
 			}
+		} else {
+			// Setup the data
+			let sharedValues = [];
+			let highlights = [];
+			for (let msgIndex in this.app.messages) {
+				sharedValues.push([]);
+				highlights.push([]);
+				for (let _ in this.app.messages[msgIndex]) {
+					sharedValues[msgIndex].push([]);
+					highlights[msgIndex].push([]);
+				}
+			}
+
+			// Track each isomorph onto the messages
+			for (let pattern in this.selectedPatterns) {
+				let value = hashString(pattern);
+				let [c0, c1] = getCorePatternIndices(pattern);
+				for (let instance of this.generator.isomorphs[pattern].instances) {
+					for (let i = c0; i <= c1; i++) {
+						sharedValues[instance[0]][instance[1] + i].push(value);
+					}
+				}
+			}
+
+			for (let pattern in this.selectedPatterns) {
+				let [c0, c1] = getCorePatternIndices(pattern);
+				for (let i = c0; i <= c1; i++) {
+					let mostComplex = null;
+					for (let instance of this.generator.isomorphs[pattern].instances) {
+						if (sharedValues[instance[0]][instance[1] + i].length > mostComplex) {
+							mostComplex = sharedValues[instance[0]][instance[1] + i];
+						}
+					}
+					const value = hashInts(mostComplex);
+					const style = Styles.getIndexed(value);
+					for (let instance of this.generator.isomorphs[pattern].instances) {
+						highlights[instance[0]][instance[1] + i] = style.bg;
+					}
+				}
+			}
+
+			// Update the message highlights
+			for (let msg = 0; msg < this.app.messages.length; msg++) {
+				for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
+					const elements = this.app.messageDisplays[msg]?.letters[letter];
+					elements.style.background = highlights[msg][letter];
+				}
+			}
 		}
+	}
+
+	setShowSeperated(showSeperated) {
+		this.showSeperated = showSeperated;
+		this.calculateAndHighlight();
 	}
 
 	setVisible(isVisible) {
@@ -979,12 +1041,15 @@ class EyeInspectorApp {
 		this.onShowAsciiChanged = new MyEvent();
 		this.onLetterClick = new MyEvent();
 
-		// Setup sub elements
-		this.isomorphGenerator = new IsomorphGenerator(this);
-		this.isomorphInspector = new IsomorphInspector(this, this.isomorphGenerator);
-		this.sharedPTInspector = new SharedPTInspector(this, this.isomorphGenerator);
-		this.currentConfigPanel = null;
-		this.currentInspectorPanel = null;
+		// Setup panels
+		this.isomorphGenerator = new IsomorphGeneratorPanel(this);
+		this.sharedPTConfig = new SharedPTConfigPanel(this);
+		this.isomorphInspector = new IsomorphInspectorPanel(this, this.isomorphGenerator);
+		this.sharedPTInspector = new SharedPTInspectorPanel(this, this.isomorphGenerator);
+		this.currentConfigPanels = [];
+		this.currentInspectorPanels = [];
+		this.configPanelsEmptyElement = document.getElementById("config-panels-empty");
+		this.inspectorPanelsEmptyElement = document.getElementById("inspector-panels-empty");
 
 		// Grab general element references
 		this.panelContentElement = document.getElementById("messages-panel-content");
@@ -1009,13 +1074,10 @@ class EyeInspectorApp {
 		for (const mode in this.highlightButtonElements) {
 			this.highlightButtonElements[mode].onclick = () => this.setHighlightMode(mode);
 		}
+
 		this.showAsciiButtonElement.onclick = () => this.toggleShowAscii();
 		this.tightSpacingButtonElement.onclick = () => this.toggleTightSpacing();
 		this.fullscreenButtonElement.onclick = () => this.toggleFullscreen();
-
-		// Setup config
-		this.configPanelEmptyElement = document.getElementById("config-panel-empty");
-		this.inspectorPanelEmptyElement = document.getElementById("inspector-panel-empty");
 
 		// Initialise content
 		this.messagesSharedCT = calculateShared(EYES);
@@ -1109,7 +1171,7 @@ class EyeInspectorApp {
 		if (mode == this.highlightMode) return;
 		this.highlightMode = mode;
 
-		// Handle the highlight modes without an inspector
+		// Handle highlights and panels for the mode
 		if (mode == HighlightMode.Values) {
 			this.highlightMessages(EYES);
 		} else if (mode == HighlightMode.SharedCT) {
@@ -1119,25 +1181,13 @@ class EyeInspectorApp {
 			this.highlightMessagesUniform(Styles.StandardDark);
 		}
 
-		// Change and update the config and inspector panels
-		if (this.currentConfigPanel != null) this.currentConfigPanel.setVisible(false);
-		if (this.currentInspectorPanel != null) this.currentInspectorPanel.setVisible(false);
-
-		this.currentConfigPanel = null;
-		this.currentInspectorPanel = null;
 		if (mode == HighlightMode.Isomorphs) {
-			this.currentConfigPanel = this.isomorphGenerator;
-			this.currentInspectorPanel = this.isomorphInspector;
+			this.setConfigPanels([this.isomorphGenerator]);
+			this.setInspectorPanels([this.isomorphInspector]);
 		} else if (mode == HighlightMode.SharedPT) {
-			this.currentConfigPanel = this.isomorphGenerator;
-			this.currentInspectorPanel = this.sharedPTInspector;
+			this.setConfigPanels([this.isomorphGenerator, this.sharedPTConfig]);
+			this.setInspectorPanels([this.sharedPTInspector]);
 		}
-
-		if (this.currentConfigPanel != null) this.currentConfigPanel.setVisible(true);
-		if (this.currentInspectorPanel != null) this.currentInspectorPanel.setVisible(true);
-
-		this.configPanelEmptyElement.style.display = this.currentConfigPanel == null ? "block" : "none";
-		this.inspectorPanelEmptyElement.style.display = this.currentInspectorPanel == null ? "block" : "none";
 
 		// And finally update the highlight mode buttons
 		for (const mode in this.highlightButtonElements) {
@@ -1179,6 +1229,22 @@ class EyeInspectorApp {
 
 	scrollTo(element) {
 		this.panelContentElement.scrollLeft = element.offsetLeft - 100;
+	}
+
+	// ------------------ Panels ------------------
+
+	setConfigPanels(panels) {
+		for (const panel of this.currentConfigPanels) panel.setVisible(false);
+		this.currentConfigPanels = panels;
+		for (const panel of this.currentConfigPanels) panel.setVisible(true);
+		this.configPanelsEmptyElement.style.display = Object.keys(this.currentConfigPanels).length == 0 ? "block" : "none";
+	}
+
+	setInspectorPanels(panels) {
+		for (const panel of this.currentInspectorPanels) panel.setVisible(false);
+		this.currentInspectorPanels = panels;
+		for (const panel of this.currentInspectorPanels) panel.setVisible(true);
+		this.inspectorPanelsEmptyElement.style.display = Object.keys(this.currentInspectorPanels).length == 0 ? "block" : "none";
 	}
 }
 
