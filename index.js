@@ -1,3 +1,5 @@
+let GLOBAL_INDEXED_MULT = 1;
+
 const EYES = [
 	[
 		50, 66, 5, 48, 62, 13, 75, 29, 24, 61, 42, 70, 66, 62, 32, 14, 81, 8, 15, 78, 2, 29, 13, 49, 1, 80, 82, 40, 63, 81, 21, 19, 0, 40, 51, 65, 26, 14, 21, 70,
@@ -55,7 +57,7 @@ class Styles {
 
 	static getIndexed(index, modifier = null) {
 		const hueOffset = 140;
-		const hue = (hueOffset + index * 137.508) % 360;
+		const hue = (hueOffset + index * 137.508 * GLOBAL_INDEXED_MULT) % 360;
 
 		let saturation = 30;
 		let lightness = 50;
@@ -528,11 +530,13 @@ class SharedPTConfigPanel {
 		this.selectAllButtonElement = document.getElementById("shared-pt-config-select-all-button");
 		this.deselectAllButtonElement = document.getElementById("shared-pt-config-deselect-all-button");
 		this.showSeperatedElement = document.getElementById("shared-pt-config-show-seperated");
+		this.mergeSequencesElement = document.getElementById("shared-pt-config-merge-sequences");
 		this.isVisible = false;
 
 		this.selectAllButtonElement.onclick = () => this.app.sharedPTInspector.selectAllIsomorphs();
 		this.deselectAllButtonElement.onclick = () => this.app.sharedPTInspector.deselectAllIsomorphs();
 		this.showSeperatedElement.onchange = (e) => this.app.sharedPTInspector.setShowSeperated(e.target.checked);
+		this.mergeSequencesElement.onchange = (e) => this.app.sharedPTInspector.setMergeSequences(e.target.checked);
 	}
 
 	setVisible(isVisible) {
@@ -779,6 +783,7 @@ class SharedPTInspectorPanel {
 		this.isVisible = false;
 		this.selectedPosition = null;
 		this.showSeperated = this.app.sharedPTConfig.showSeperatedElement.checked;
+		this.mergeSequences = this.app.sharedPTConfig.mergeSequencesElement.checked;
 
 		this.containerElement = document.getElementById("shared-pt-inspector");
 		this.isomorphListElement = document.getElementById("shared-pt-inspector-list");
@@ -972,68 +977,150 @@ class SharedPTInspectorPanel {
 				}
 			}
 		} else {
-// Setup the data
-let sharedValues = [];
-for (let msgIndex in this.app.messages) {
-	sharedValues.push([]);
-	for (let _ in this.app.messages[msgIndex]) {
-		sharedValues[msgIndex].push(new Set());
-	}
-}
-
-// Track each isomorph on each cell of the messages
-for (let pattern in this.selectedPatterns) {
-	let value = hashString(pattern);
-	let [c0, c1] = getCorePatternIndices(pattern);
-	for (let instance of this.generator.isomorphs[pattern].instances) {
-		for (let i = c0; i <= c1; i++) {
-			sharedValues[instance[0]][instance[1] + i].add(value);
-		}
-	}
-}
-
-// For each column in each isomorph we need to union all the involved isomorphs
-// We do this iteratively as the isomorphs can affect each other
-let anyChanged = true;
-while (anyChanged) {
-	anyChanged = false;
-	// Check every pattern from the start each iteration
-	for (let pattern in this.selectedPatterns) {
-		let [c0, c1] = getCorePatternIndices(pattern);
-		for (let i = c0; i <= c1; i++) {
-			// Union this column for each instance
-			let columnValues = new Set();
-			for (let instance of this.generator.isomorphs[pattern].instances) {
-				let instanceValues = sharedValues[instance[0]][instance[1] + i];
-				columnValues = unionSets([columnValues, instanceValues]);
-			}
-
-			// Re-assign the union to each instance
-			for (let instance of this.generator.isomorphs[pattern].instances) {
-				let instanceValues = sharedValues[instance[0]][instance[1] + i];
-				if (!setsEqual(instanceValues, columnValues)) {
-					sharedValues[instance[0]][instance[1] + i] = new Set(columnValues);
-					anyChanged = true;
+			// Setup the data
+			// First this will be sets containing isomorphs
+			// Then it will be ints representing the sets
+			// Then finally sequences merge this to a different int
+			let sharedData = [];
+			for (let msgIndex in this.app.messages) {
+				sharedData.push([]);
+				for (let _ in this.app.messages[msgIndex]) {
+					sharedData[msgIndex].push(new Set());
 				}
 			}
-		}
-	}
-}
 
-// Now highlight the messages
-for (let msg = 0; msg < this.app.messages.length; msg++) {
-	for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
-		if (sharedValues[msg][letter].size == 0) continue;
-		const value = hashInts(sharedValues[msg][letter]);
-		const elements = this.app.messageDisplays[msg]?.letters[letter];
-		elements.style.background = Styles.getIndexed(value).bg;
-	}
-}
+			// Track each isomorph on each cell of the messages
+			for (let pattern in this.selectedPatterns) {
+				let value = hashString(pattern);
+				let [c0, c1] = getCorePatternIndices(pattern);
+				for (let instance of this.generator.isomorphs[pattern].instances) {
+					for (let i = c0; i <= c1; i++) {
+						sharedData[instance[0]][instance[1] + i].add(value);
+					}
+				}
+			}
+
+			// For each column in each isomorph we need to union all the involved isomorphs
+			// We do this iteratively as the isomorphs can affect each other
+			let anyChanged = true;
+			while (anyChanged) {
+				anyChanged = false;
+				// Check every pattern from the start each iteration
+				for (let pattern in this.selectedPatterns) {
+					let [c0, c1] = getCorePatternIndices(pattern);
+					for (let i = c0; i <= c1; i++) {
+						// Union this column for each instance
+						let columnValues = new Set();
+						for (let instance of this.generator.isomorphs[pattern].instances) {
+							let instanceValues = sharedData[instance[0]][instance[1] + i];
+							columnValues = unionSets([columnValues, instanceValues]);
+						}
+
+						// Re-assign the union to each instance
+						for (let instance of this.generator.isomorphs[pattern].instances) {
+							let instanceValues = sharedData[instance[0]][instance[1] + i];
+							if (!setsEqual(instanceValues, columnValues)) {
+								sharedData[instance[0]][instance[1] + i] = new Set(columnValues);
+								anyChanged = true;
+							}
+						}
+					}
+				}
+			}
+
+			// Now we can combine each into a single int
+			for (let msgIndex in this.app.messages) {
+				for (let i in this.app.messages[msgIndex]) {
+					if (sharedData[msgIndex][i].size == 0) {
+						sharedData[msgIndex][i] = null;
+					} else {
+						sharedData[msgIndex][i] = hashInts(sharedData[msgIndex][i]);
+					}
+				}
+			}
+
+			if (this.mergeSequences) {
+				// Now we can begin the process to merge sequences together
+				let maxLength = 0;
+				for (let msg = 0; msg < sharedData.length; msg++) {
+					maxLength = Math.max(maxLength, sharedData[msg].length);
+				}
+				let taken = [];
+				for (let msgIndex in this.app.messages) {
+					taken.push([]);
+					for (let _ in this.app.messages[msgIndex]) {
+						taken[msgIndex].push(false);
+					}
+				}
+
+				// Look over all sequences longest to shortest
+				for (let currentLength = maxLength; currentLength >= 1; currentLength--) {
+					let buckets = new Map();
+
+					// First discover all possible
+					for (let msg = 0; msg < sharedData.length; msg++) {
+						let row = sharedData[msg];
+						for (let i = 0; i + currentLength <= row.length; i++) {
+							// Join each int together and skip if any missing
+							let valid = true;
+							let keyParts = [];
+							for (let k = 0; k < currentLength; k++) {
+								let cell = row[i + k];
+								if (cell == null) {
+									valid = false;
+									break;
+								}
+								keyParts.push(cell);
+							}
+							if (!valid) continue;
+
+							// create a single hash for the ordered sequence
+							let sequenceKey = hashString(keyParts.join("|"));
+							if (!buckets.has(sequenceKey)) buckets.set(sequenceKey, []);
+							buckets.get(sequenceKey).push([msg, i]);
+						}
+					}
+
+					// Now greedily apply repeated sequences
+					for (let [key, instances] of buckets) {
+						if (instances.length < 2) continue;
+						for (let [msg, start] of instances) {
+							let free = true;
+							for (let i = 0; i < currentLength; i++) {
+								if (taken[msg][start + i]) {
+									free = false;
+									break;
+								}
+							}
+							if (!free) continue;
+							for (let k = 0; k < currentLength; k++) {
+								sharedData[msg][start + k] = key;
+								taken[msg][start + k] = true;
+							}
+						}
+					}
+				}
+			}
+
+			// Now highlight the messages
+			for (let msg = 0; msg < this.app.messages.length; msg++) {
+				for (let letter = 0; letter < this.app.messages[msg].length; letter++) {
+					const value = sharedData[msg][letter];
+					if (value == null) continue;
+					const elements = this.app.messageDisplays[msg]?.letters[letter];
+					elements.style.background = Styles.getIndexed(value).bg;
+				}
+			}
 		}
 	}
 
 	setShowSeperated(showSeperated) {
 		this.showSeperated = showSeperated;
+		this.calculateAndHighlight();
+	}
+
+	setMergeSequences(mergeSequences) {
+		this.mergeSequences = mergeSequences;
 		this.calculateAndHighlight();
 	}
 
