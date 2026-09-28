@@ -66,7 +66,7 @@ body {
 }
 
 .layout-outer {
-	max-width: 1600px;
+	max-width: 1800px;
 	height: 100%;
 	overflow: hidden;
 	display: flex;
@@ -74,6 +74,7 @@ body {
 	gap: var(--standard-padding);
 	padding: var(--standard-padding);
 	margin: 0 auto;
+	margin-top: 60px;
 }
 
 .layout-row-1 {
@@ -100,16 +101,16 @@ body.fullscreen .layout-row-2 > div {
 	height: 100%;
 }
 
+body.fullscreen .layout-row-2 {
+	gap: var(--small-padding);
+}
+
 body.fullscreen .layout-outer {
 	max-width: unset;
 	margin: unset;
 	height: 100%;
 	gap: var(--small-padding);
 	padding: var(--small-padding);
-}
-
-body.fullscreen .layout-row-2 {
-	gap: var(--small-padding);
 }
 
 /* -------------------------------------- Messages Panel -------------------------------------- */
@@ -179,6 +180,21 @@ body.fullscreen .layout-row-2 {
 	overflow: hidden;
 	overflow-x: auto;
 	padding-bottom: var(--standard-padding);
+}
+
+#messages-panel #messages-input {
+	width: 100%;
+	min-height: 12rem;
+	background-color: var(--col-fg-panel);
+	color: var(--col-font-text);
+	border: none;
+	outline: none;
+	border-radius: var(--standard-border-radius);
+	padding: var(--standard-padding);
+	font-family: "Cousine", monospace;
+	font-size: var(--small-font-size);
+	line-height: var(--small-font-line-height);
+	resize: vertical;
 }
 
 #messages-panel #messages-column-indices {
