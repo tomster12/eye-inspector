@@ -472,7 +472,7 @@ class Styles {
 	static Disabled = { bg: null, fg: null };
 	static StandardDark = { bg: null, fg: "#ffffff" };
 	static StandardBright = { bg: "#77818d", fg: "#494c4d" };
-	static HueIndexMult = 1;
+	static HueIndexMult = 3;
 
 	static getIndexed(index, modifier = null) {
 		const hueOffset = 140;
@@ -908,7 +908,7 @@ class IsomorphInspectorPanel {
 			// Create the indices info text first
 			const selectionMessageIndicesElement = document.createElement("div");
 			selectionMessageIndicesElement.classList.toggle("selection-message-indices");
-			selectionMessageIndicesElement.innerHTML = `message ${instance[0]} (${instance[1]} - ${instance[1] + this.selectedPattern.length - 1})`;
+			selectionMessageIndicesElement.innerHTML = `message ${instance[0] + 1} (${instance[1]} - ${instance[1] + this.selectedPattern.length - 1})`;
 			selectionMessageElement.appendChild(selectionMessageIndicesElement);
 
 			// Then an element for each letter
