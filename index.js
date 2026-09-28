@@ -908,7 +908,7 @@ class SharedPTInspectorPanel {
 			let included = false;
 			for (let i = 0; i < this.generator.isomorphs[pattern].instances.length; i++) {
 				const instance = this.generator.isomorphs[pattern].instances[i];
-				if (instance[0] == this.selectedPosition[0] && instance[1] < this.selectedPosition[1] && instance[1] + pattern.length > this.selectedPosition[1]) {
+				if (instance[0] == this.selectedPosition[0] && instance[1] <= this.selectedPosition[1] && instance[1] + pattern.length > this.selectedPosition[1]) {
 					included = true;
 					break;
 				}
@@ -1045,58 +1045,61 @@ class SharedPTInspectorPanel {
 				for (let msg = 0; msg < sharedData.length; msg++) {
 					maxLength = Math.max(maxLength, sharedData[msg].length);
 				}
-				let taken = [];
-				for (let msgIndex in this.app.messages) {
-					taken.push([]);
-					for (let _ in this.app.messages[msgIndex]) {
-						taken[msgIndex].push(false);
-					}
-				}
 
-				// Look over all sequences longest to shortest
+				// Track which cells we have assigned merged sequences to
+				let taken = sharedData.map((row) => row.map(() => false));
+
+				// Discover all sequences of all lengths
+				let buckets = new Map();
 				for (let currentLength = maxLength; currentLength >= 1; currentLength--) {
-					let buckets = new Map();
-
-					// First discover all possible
 					for (let msg = 0; msg < sharedData.length; msg++) {
-						let row = sharedData[msg];
-						for (let i = 0; i + currentLength <= row.length; i++) {
-							// Join each int together and skip if any missing
+						for (let i = 0; i + currentLength <= sharedData[msg].length; i++) {
 							let valid = true;
-							let keyParts = [];
+							let sequence = [];
 							for (let k = 0; k < currentLength; k++) {
-								let cell = row[i + k];
-								if (cell == null) {
+								if (sharedData[msg][i + k] == null) {
 									valid = false;
 									break;
 								}
-								keyParts.push(cell);
+								sequence.push(sharedData[msg][i + k]);
 							}
 							if (!valid) continue;
 
-							// create a single hash for the ordered sequence
-							let sequenceKey = hashString(keyParts.join("|"));
+							let sequenceKey = hashString(sequence.join("|"));
 							if (!buckets.has(sequenceKey)) buckets.set(sequenceKey, []);
-							buckets.get(sequenceKey).push([msg, i]);
+							buckets.get(sequenceKey).push({ msg, start: i, length: currentLength });
 						}
 					}
+				}
 
-					// Now greedily apply repeated sequences
-					for (let [key, instances] of buckets) {
-						if (instances.length < 2) continue;
-						for (let [msg, start] of instances) {
-							let free = true;
-							for (let i = 0; i < currentLength; i++) {
-								if (taken[msg][start + i]) {
-									free = false;
-									break;
-								}
+				// Convert map to a list and keep length info
+				let bucketList = [];
+				for (let [key, instances] of buckets) {
+					if (instances.length < 2) continue;
+					if (instances[0].length < 3) continue;
+					bucketList.push({ key, instances, length: instances[0].length });
+				}
+
+				// sort globally: first by number of instances, then by length
+				bucketList.sort((a, b) => {
+					// if (b.instances.length !== a.instances.length) return b.instances.length - a.instances.length;
+					return b.length - a.length;
+				});
+
+				// greedily assign across all messages
+				for (let { key, instances, length } of bucketList) {
+					for (let { msg, start } of instances) {
+						let free = true;
+						for (let i = 0; i < length; i++) {
+							if (taken[msg][start + i]) {
+								free = false;
+								break;
 							}
-							if (!free) continue;
-							for (let k = 0; k < currentLength; k++) {
-								sharedData[msg][start + k] = key;
-								taken[msg][start + k] = true;
-							}
+						}
+						if (!free) continue;
+						for (let k = 0; k < length; k++) {
+							sharedData[msg][start + k] = key;
+							taken[msg][start + k] = true;
 						}
 					}
 				}
