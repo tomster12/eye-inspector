@@ -153,7 +153,7 @@ function calculateIsomorphs(messages, maxLength = 30, toExtend = true) {
 			for (let i = 0; i < msg.length - len + 1; i++) {
 				let instance = msg.slice(i, i + len);
 
-				// Optionally filter on start and end values having a repeat within the range
+				// Optionally filter on start and end values requiring a repeat within the range
 				if (!toExtend) {
 					const start = instance[0];
 					const end = instance[instance.length - 1];
@@ -175,7 +175,6 @@ function calculateIsomorphs(messages, maxLength = 30, toExtend = true) {
 				for (let letter of instance) {
 					letterCounts[letter] = (letterCounts[letter] || 0) + 1;
 				}
-
 				let pattern = "";
 				for (let letter of instance) {
 					if (letterCounts[letter] > 1 && !letterMapping[letter]) {
@@ -265,6 +264,86 @@ function calculateIsomorphs(messages, maxLength = 30, toExtend = true) {
 	}
 
 	return isomorphs;
+}
+
+function getPatternRestriction(pattern, offset, length) {
+	// Re-derive the pattern of a sub-section of another pattern
+	// This is sot we compare a a shorter pattern against a sub-section
+
+	const substring = pattern.slice(offset, offset + length);
+
+	const counts = {};
+	for (let letter of substring) {
+		if (letter !== ".") counts[letter] = (counts[letter] || 0) + 1;
+	}
+
+	const remap = {};
+	let restricted = "";
+	for (let letter of substring) {
+		if (letter === "." || counts[letter] < 2) {
+			restricted += ".";
+		} else {
+			if (!remap[letter]) remap[letter] = String.fromCharCode(65 + Object.keys(remap).length);
+			restricted += remap[letter];
+		}
+	}
+
+	return restricted;
+}
+
+function removeRedundantIsomorphs(isomorphs) {
+	// Only remove a pattern if EVERY instance is explained by an instance of the SAME single
+	// other (longer) pattern, at the correct offset into it, and only kept otherwise
+
+	function windowContains(outerStart, outerLength, innerStart, innerLength) {
+		return outerStart <= innerStart && outerStart + outerLength >= innerStart + innerLength;
+	}
+
+	const patterns = Object.keys(isomorphs);
+
+	// Index each pattern's instances by message for fast containment lookups
+	const instancesByPatternAndMessage = new Map();
+	for (let pattern of patterns) {
+		const byMessage = new Map();
+		for (let instance of isomorphs[pattern].instances) {
+			const msgIndex = instance[0];
+			if (!byMessage.has(msgIndex)) byMessage.set(msgIndex, []);
+			byMessage.get(msgIndex).push(instance[1]);
+		}
+		instancesByPatternAndMessage.set(pattern, byMessage);
+	}
+
+	const filteredIsomorphs = {};
+	for (let pattern of patterns) {
+		const length = pattern.length;
+		const instances = isomorphs[pattern].instances;
+
+		const isFullyContainedByOnePattern = patterns.some((otherPattern) => {
+			// Check other pattern could potentially contain this pattern
+			if (otherPattern === pattern) return false;
+			const otherLength = otherPattern.length;
+			if (otherLength <= length) return false;
+
+			const otherByMessage = instancesByPatternAndMessage.get(otherPattern);
+
+			// For each instance of this pattern
+			return instances.every((instance) => {
+				const [msgIndex, start] = instance;
+				const otherStarts = otherByMessage.get(msgIndex);
+				if (!otherStarts) return false;
+
+				return otherStarts.some((otherStart) => {
+					if (!windowContains(otherStart, otherLength, start, length)) return false;
+					const relativeOffset = start - otherStart;
+					return getPatternRestriction(otherPattern, relativeOffset, length) === pattern;
+				});
+			});
+		});
+
+		if (!isFullyContainedByOnePattern) filteredIsomorphs[pattern] = isomorphs[pattern];
+	}
+
+	return filteredIsomorphs;
 }
 
 function calculateAllomorphs(messages) {
@@ -547,11 +626,13 @@ class IsomorphGeneratorPanel {
 		this.inputMinValuesElement = document.getElementById("isomorph-generator-input-min-values");
 		this.inputSharedSectionsElement = document.getElementById("isomorph-generator-input-shared-sections");
 		this.inputExtendElement = document.getElementById("isomorph-generator-input-extend");
+		this.inputRemoveRedundantElement = document.getElementById("isomorph-generator-input-remove-redundant");
 
 		this.maxLength = parseInt(this.inputMaxLengthElement.value);
 		this.minValues = parseInt(this.inputMinValuesElement.value);
 		this.sharedSections = this.inputSharedSectionsElement.checked;
 		this.toExtend = this.inputExtendElement.checked;
+		this.removeRedundant = this.inputRemoveRedundantElement.checked;
 
 		this.containerElement.addEventListener("keypress", (evt) => {
 			if (evt.keyCode === 13) {
@@ -570,6 +651,7 @@ class IsomorphGeneratorPanel {
 		this.minValues = parseInt(this.inputMinValuesElement.value);
 		this.sharedSections = this.inputSharedSectionsElement.checked;
 		this.toExtend = this.inputExtendElement.checked;
+		this.removeRedundant = this.inputRemoveRedundantElement.checked;
 
 		// Calculate and filter isomorphs
 		this.isomorphs = calculateIsomorphs(this.app.messages, this.maxLength, this.toExtend);
@@ -602,6 +684,10 @@ class IsomorphGeneratorPanel {
 			if (this.isomorphs[pattern].instances.length === 1) {
 				delete this.isomorphs[pattern];
 			}
+		}
+
+		if (this.removeRedundant) {
+			this.isomorphs = removeRedundantIsomorphs(this.isomorphs);
 		}
 
 		this.toggleGenerateButtonSpinner(false);
@@ -787,7 +873,7 @@ class IsomorphInspectorPanel {
 			let included = false;
 			for (let i = 0; i < this.generator.isomorphs[pattern].instances.length; i++) {
 				const instance = this.generator.isomorphs[pattern].instances[i];
-				if (instance[0] == this.selectedPosition[0] && instance[1] < this.selectedPosition[1] && instance[1] + pattern.length > this.selectedPosition[1]) {
+				if (instance[0] == this.selectedPosition[0] && instance[1] <= this.selectedPosition[1] && instance[1] + pattern.length > this.selectedPosition[1]) {
 					included = true;
 					break;
 				}
@@ -1336,7 +1422,7 @@ class EyeInspectorApp {
 
 			// Create index element for each row
 			let rowIndexElement = document.createElement("div");
-			rowIndexElement.textContent = msgIndex.toString();
+			rowIndexElement.textContent = (msgIndex + 1).toString();
 			this.messagesRowIndicesElement.appendChild(rowIndexElement);
 		}
 
