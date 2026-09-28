@@ -714,10 +714,10 @@ class SharedPTConfigPanel {
 		this.mergeSequencesElement = document.getElementById("shared-pt-config-merge-sequences");
 		this.isVisible = false;
 
-		this.selectAllButtonElement.onclick = () => this.app.sharedPTInspector.selectAllIsomorphs();
-		this.deselectAllButtonElement.onclick = () => this.app.sharedPTInspector.deselectAllIsomorphs();
-		this.showSeperatedElement.onchange = (e) => this.app.sharedPTInspector.setShowSeperated(e.target.checked);
-		this.mergeSequencesElement.onchange = (e) => this.app.sharedPTInspector.setMergeSequences(e.target.checked);
+		this.selectAllButtonElement.onclick = () => this.app.sharedPTInspectorPanel.selectAllIsomorphs();
+		this.deselectAllButtonElement.onclick = () => this.app.sharedPTInspectorPanel.deselectAllIsomorphs();
+		this.showSeperatedElement.onchange = (e) => this.app.sharedPTInspectorPanel.setShowSeperated(e.target.checked);
+		this.mergeSequencesElement.onchange = (e) => this.app.sharedPTInspectorPanel.setMergeSequences(e.target.checked);
 	}
 
 	setVisible(isVisible) {
@@ -805,6 +805,8 @@ class IsomorphInspectorPanel {
 		let totalInstances = Object.values(this.generator.isomorphs).reduce((acc, val) => acc + val.instances.length, 0);
 		infoElement2.textContent = "Total instances: " + totalInstances;
 		this.isomorphListInfoElement.appendChild(infoElement2);
+
+		this.applyLetterFilter();
 	}
 
 	selectIsomorph(pattern) {
@@ -860,6 +862,10 @@ class IsomorphInspectorPanel {
 			}
 		}
 
+		this.applyLetterFilter();
+	}
+
+	applyLetterFilter() {
 		// Not selecting anything so enable all isomorphs
 		if (this.selectedPosition == null) {
 			for (let pattern in this.isomorphDisplays) {
@@ -979,7 +985,6 @@ class SharedPTInspectorPanel {
 	}
 
 	recreateIsomorphElements() {
-		this.selectLetter(null);
 		this.selectedPatterns = {};
 		this.isomorphDisplays = {};
 
@@ -1030,6 +1035,7 @@ class SharedPTInspectorPanel {
 		infoElement2.textContent = "Total instances: " + totalInstances;
 		this.isomorphListInfoElement.appendChild(infoElement2);
 
+		this.applyLetterFilter();
 		this.calculateAndHighlight();
 	}
 
@@ -1076,6 +1082,10 @@ class SharedPTInspectorPanel {
 			}
 		}
 
+		this.applyLetterFilter();
+	}
+
+	applyLetterFilter() {
 		// Not selecting anything so enable all isomorphs
 		if (this.selectedPosition == null) {
 			for (let pattern in this.isomorphDisplays) {
