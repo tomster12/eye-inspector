@@ -1,5 +1,3 @@
-let GLOBAL_INDEXED_MULT = 1;
-
 const EYES = [
 	[
 		50, 66, 5, 48, 62, 13, 75, 29, 24, 61, 42, 70, 66, 62, 32, 14, 81, 8, 15, 78, 2, 29, 13, 49, 1, 80, 82, 40, 63, 81, 21, 19, 0, 40, 51, 65, 26, 14, 21, 70,
@@ -50,59 +48,7 @@ const EYES = [
 	],
 ];
 
-class Styles {
-	static Disabled = { bg: null, fg: null };
-	static StandardDark = { bg: null, fg: "#ffffff" };
-	static StandardBright = { bg: "#77818d", fg: "#494c4d" };
-
-	static getIndexed(index, modifier = null) {
-		const hueOffset = 140;
-		const hue = (hueOffset + index * 137.508 * GLOBAL_INDEXED_MULT) % 360;
-
-		let saturation = 30;
-		let lightness = 50;
-		if (modifier == "darken") {
-			lightness = Math.max(0, lightness - 15);
-			saturation = Math.min(100, saturation - 5);
-		}
-
-		const bg = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-		const fg = "#ffffff";
-		return { bg, fg };
-	}
-
-	static getGreenGradual(pct) {
-		pct = Math.max(0, Math.min(1, pct));
-		const hue = 60 + pct * 60;
-		const saturation = 20 + pct * 10;
-		const lightness = 65 - pct * 20;
-		const bg = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-		const fg = lightness > 50 ? "#2b2b2b" : "#ffffff";
-		return { bg, fg };
-	}
-
-	static getRedToGreen(pct) {
-		pct = Math.max(0, Math.min(1, pct));
-
-		// (0 -> 120) is (red -> yellow -> green)
-		const hue = 120 * pct;
-		const saturation = 80;
-		const lightness = 50;
-
-		const bg = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-		const fg = "#000000";
-		return { bg, fg };
-	}
-
-	static getPatternIndexed(symbol) {
-		if (symbol == ".") {
-			return Styles.StandardBright;
-		} else {
-			let value = symbol.charCodeAt(0) - 64;
-			return Styles.getIndexed(value);
-		}
-	}
-}
+// ------------------------------------ Utility
 
 class IdTracker {
 	constructor(start) {
@@ -137,8 +83,6 @@ class MyEvent {
 		}
 	}
 }
-
-const HighlightMode = Object.fromEntries(["None", "Values", "SharedCT", "Isomorphs", "SharedPT"].map((k, i) => [k, i]));
 
 function unionSets(sets) {
 	return new Set(sets.flatMap((s) => [...s]));
@@ -182,6 +126,8 @@ function choose(n, k) {
 	}
 	return res;
 }
+
+// ------------------------------------ Isomorphs
 
 function getCorePatternIndices(pattern) {
 	let start = 0;
@@ -437,7 +383,156 @@ function calculateShared(messages) {
 	return output;
 }
 
-// --------------------------------------------------------------------
+// ------------------------------------ Isomorphs
+
+const HighlightMode = Object.fromEntries(
+	["None", "Values", "SharedCT", "Isomorphs", "SharedPT"]
+		.map((k, i) => [k, i]));
+
+class Styles {
+	static Disabled = { bg: null, fg: null };
+	static StandardDark = { bg: null, fg: "#ffffff" };
+	static StandardBright = { bg: "#77818d", fg: "#494c4d" };
+	static HueIndexMult = 1;
+
+	static getIndexed(index, modifier = null) {
+		const hueOffset = 140;
+		const hue = (hueOffset + index * 137.508 * Styles.HueIndexMult) % 360;
+
+		let saturation = 30;
+		let lightness = 50;
+		if (modifier == "darken") {
+			lightness = Math.max(0, lightness - 15);
+			saturation = Math.min(100, saturation - 5);
+		}
+
+		const bg = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+		const fg = "#ffffff";
+		return { bg, fg };
+	}
+
+	static getGreenGradual(pct) {
+		pct = Math.max(0, Math.min(1, pct));
+		const hue = 60 + pct * 60;
+		const saturation = 20 + pct * 10;
+		const lightness = 65 - pct * 20;
+		const bg = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+		const fg = lightness > 50 ? "#2b2b2b" : "#ffffff";
+		return { bg, fg };
+	}
+
+	static getRedToGreen(pct) {
+		pct = Math.max(0, Math.min(1, pct));
+
+		// (0 -> 120) is (red -> yellow -> green)
+		const hue = 120 * pct;
+		const saturation = 80;
+		const lightness = 50;
+
+		const bg = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+		const fg = "#000000";
+		return { bg, fg };
+	}
+
+	static getPatternIndexed(symbol) {
+		if (symbol == ".") {
+			return Styles.StandardBright;
+		} else {
+			let value = symbol.charCodeAt(0) - 64;
+			return Styles.getIndexed(value);
+		}
+	}
+}
+
+class MessageInputPanel {
+	constructor(app) {
+		this.app = app;
+		this.showInput = false;
+		this.parseAscii = false;
+
+		this.toggleShowInputButtonElement = document.getElementById("toggle-show-input-button");
+		this.toggleParseAsciiButtonElement = document.getElementById("toggle-parse-input-ascii-button");
+		this.resetInputButtonElement = document.getElementById("reset-input-button");
+		this.messagesInputElement = document.getElementById("messages-input");
+
+		this.toggleShowInputButtonElement.onclick = () => this.toggleShowInput();
+		this.toggleParseAsciiButtonElement.onclick = () => this.toggleParseAscii();
+		this.resetInputButtonElement.onclick = () => this.resetToDefault();
+
+		this.messagesInputElement.addEventListener("keydown", (evt) => {
+			if (evt.key === "Enter" && evt.ctrlKey) {
+				evt.preventDefault();
+				this.applyInput();
+			}
+		});
+	}
+
+	toggleShowInput() {
+		this.showInput = !this.showInput;
+		this.toggleShowInputButtonElement.classList.toggle("active", this.showInput);
+		this.toggleShowInputButtonElement.innerHTML = this.showInput ? "Preview" : "Edit";
+
+		if (this.showInput) {
+			this.app.panelContentElement.style.display = "none";
+			this.messagesInputElement.style.display = "block";
+			this.messagesInputElement.value = this.serializeMessages(this.app.messages);
+		} else {
+			this.app.panelContentElement.style.display = "flex";
+			this.messagesInputElement.style.display = "none";
+			this.applyInput();
+		}
+	}
+
+	toggleParseAscii() {
+		this.parseAscii = !this.parseAscii;
+		this.toggleParseAsciiButtonElement.classList.toggle("active", this.parseAscii);
+
+		// Reflect the new parse mode in the textarea if it's currently showing
+		if (this.showInput) {
+			this.messagesInputElement.value = this.serializeMessages(this.app.messages);
+		}
+	}
+
+	applyInput() {
+		const messages = this.parseMessages(this.messagesInputElement.value);
+		if (messages.length > 0) {
+			this.app.setMessages(messages);
+		}
+	}
+
+	resetToDefault() {
+		this.app.setMessages(EYES);
+		if (this.showInput) {
+			this.messagesInputElement.value = this.serializeMessages(this.app.messages);
+		}
+	}
+
+	parseMessages(text) {
+		const lines = text.split("\n");
+
+		let messages;
+		if (this.parseAscii) {
+			messages = lines.map((line) => line.split("").map((letter) => letter.charCodeAt(0) - 32));
+		} else {
+			messages = lines.map((line) =>
+				line
+					.split(",")
+					.map((value) => value.trim())
+					.filter((value) => value.length > 0)
+					.map((value) => parseInt(value)),
+			);
+		}
+
+		return messages.filter((message) => message.length > 0);
+	}
+
+	serializeMessages(messages) {
+		if (this.parseAscii) {
+			return messages.map((message) => message.map((value) => String.fromCharCode(value + 32)).join("")).join("\n");
+		}
+		return messages.map((message) => message.join(",")).join("\n");
+	}
+}
 
 class IsomorphGeneratorPanel {
 	constructor(app) {
@@ -782,8 +877,8 @@ class SharedPTInspectorPanel {
 		this.sortedIsomorphs = [];
 		this.isVisible = false;
 		this.selectedPosition = null;
-		this.showSeperated = this.app.sharedPTConfig.showSeperatedElement.checked;
-		this.mergeSequences = this.app.sharedPTConfig.mergeSequencesElement.checked;
+		this.showSeperated = this.app.sharedPTConfigPanel.showSeperatedElement.checked;
+		this.mergeSequences = this.app.sharedPTConfigPanel.mergeSequencesElement.checked;
 
 		this.containerElement = document.getElementById("shared-pt-inspector");
 		this.isomorphListElement = document.getElementById("shared-pt-inspector-list");
@@ -908,7 +1003,7 @@ class SharedPTInspectorPanel {
 			let included = false;
 			for (let i = 0; i < this.generator.isomorphs[pattern].instances.length; i++) {
 				const instance = this.generator.isomorphs[pattern].instances[i];
-				if (instance[0] == this.selectedPosition[0] && instance[1] < this.selectedPosition[1] && instance[1] + pattern.length > this.selectedPosition[1]) {
+				if (instance[0] == this.selectedPosition[0] && instance[1] <= this.selectedPosition[1] && instance[1] + pattern.length > this.selectedPosition[1]) {
 					included = true;
 					break;
 				}
@@ -1045,58 +1140,61 @@ class SharedPTInspectorPanel {
 				for (let msg = 0; msg < sharedData.length; msg++) {
 					maxLength = Math.max(maxLength, sharedData[msg].length);
 				}
-				let taken = [];
-				for (let msgIndex in this.app.messages) {
-					taken.push([]);
-					for (let _ in this.app.messages[msgIndex]) {
-						taken[msgIndex].push(false);
-					}
-				}
 
-				// Look over all sequences longest to shortest
+				// Track which cells we have assigned merged sequences to
+				let taken = sharedData.map((row) => row.map(() => false));
+
+				// Discover all sequences of all lengths
+				let buckets = new Map();
 				for (let currentLength = maxLength; currentLength >= 1; currentLength--) {
-					let buckets = new Map();
-
-					// First discover all possible
 					for (let msg = 0; msg < sharedData.length; msg++) {
-						let row = sharedData[msg];
-						for (let i = 0; i + currentLength <= row.length; i++) {
-							// Join each int together and skip if any missing
+						for (let i = 0; i + currentLength <= sharedData[msg].length; i++) {
 							let valid = true;
-							let keyParts = [];
+							let sequence = [];
 							for (let k = 0; k < currentLength; k++) {
-								let cell = row[i + k];
-								if (cell == null) {
+								if (sharedData[msg][i + k] == null) {
 									valid = false;
 									break;
 								}
-								keyParts.push(cell);
+								sequence.push(sharedData[msg][i + k]);
 							}
 							if (!valid) continue;
 
-							// create a single hash for the ordered sequence
-							let sequenceKey = hashString(keyParts.join("|"));
+							let sequenceKey = hashString(sequence.join("|"));
 							if (!buckets.has(sequenceKey)) buckets.set(sequenceKey, []);
-							buckets.get(sequenceKey).push([msg, i]);
+							buckets.get(sequenceKey).push({ msg, start: i, length: currentLength });
 						}
 					}
+				}
 
-					// Now greedily apply repeated sequences
-					for (let [key, instances] of buckets) {
-						if (instances.length < 2) continue;
-						for (let [msg, start] of instances) {
-							let free = true;
-							for (let i = 0; i < currentLength; i++) {
-								if (taken[msg][start + i]) {
-									free = false;
-									break;
-								}
+				// Convert map to a list and keep length info
+				let bucketList = [];
+				for (let [key, instances] of buckets) {
+					if (instances.length < 2) continue;
+					if (instances[0].length < 3) continue;
+					bucketList.push({ key, instances, length: instances[0].length });
+				}
+
+				// sort globally: first by number of instances, then by length
+				bucketList.sort((a, b) => {
+					// if (b.instances.length !== a.instances.length) return b.instances.length - a.instances.length;
+					return b.length - a.length;
+				});
+
+				// greedily assign across all messages
+				for (let { key, instances, length } of bucketList) {
+					for (let { msg, start } of instances) {
+						let free = true;
+						for (let i = 0; i < length; i++) {
+							if (taken[msg][start + i]) {
+								free = false;
+								break;
 							}
-							if (!free) continue;
-							for (let k = 0; k < currentLength; k++) {
-								sharedData[msg][start + k] = key;
-								taken[msg][start + k] = true;
-							}
+						}
+						if (!free) continue;
+						for (let k = 0; k < length; k++) {
+							sharedData[msg][start + k] = key;
+							taken[msg][start + k] = true;
 						}
 					}
 				}
@@ -1141,18 +1239,21 @@ class EyeInspectorApp {
 	constructor(messages) {
 		this.messages = messages;
 		this.highlightMode = null;
-		this.showAscii = false;
+		this.showAscii = true;
 		this.isTightSpacing = false;
 		this.isFullscreen = false;
 
 		this.onShowAsciiChanged = new MyEvent();
 		this.onLetterClick = new MyEvent();
+		this.onMessagesChanged = new MyEvent();
 
 		// Setup panels
-		this.isomorphGenerator = new IsomorphGeneratorPanel(this);
-		this.sharedPTConfig = new SharedPTConfigPanel(this);
-		this.isomorphInspector = new IsomorphInspectorPanel(this, this.isomorphGenerator);
-		this.sharedPTInspector = new SharedPTInspectorPanel(this, this.isomorphGenerator);
+		this.messageInputPanel = new MessageInputPanel(this);
+		this.isomorphGeneratorPanel = new IsomorphGeneratorPanel(this);
+		this.sharedPTConfigPanel = new SharedPTConfigPanel(this);
+		this.isomorphInspectorPanel = new IsomorphInspectorPanel(this, this.isomorphGeneratorPanel);
+		this.sharedPTInspectorPanel = new SharedPTInspectorPanel(this, this.isomorphGeneratorPanel);
+
 		this.currentConfigPanels = [];
 		this.currentInspectorPanels = [];
 		this.configPanelsEmptyElement = document.getElementById("config-panels-empty");
@@ -1187,14 +1288,21 @@ class EyeInspectorApp {
 		this.fullscreenButtonElement.onclick = () => this.toggleFullscreen();
 
 		// Initialise content
-		this.messagesSharedCT = calculateShared(EYES);
-		this.messagesAllomorphs = calculateAllomorphs(EYES);
-		this.recreateMessageElements();
-		this.toggleShowAscii(true);
-
-		this.isomorphGenerator.generate();
-
+		this.setMessages(messages);
 		this.setHighlightMode(HighlightMode.Values);
+	}
+
+	setMessages(messages) {
+		this.messages = messages;
+		this.messagesSharedCT = calculateShared(messages);
+		this.messagesAllomorphs = calculateAllomorphs(messages);
+		this.recreateMessageElements();
+		this.toggleShowAscii(this.showAscii);
+
+		this.isomorphGeneratorPanel.generate();
+		this.refreshHighlight();
+
+		this.onMessagesChanged.trigger(messages);
 	}
 
 	recreateMessageElements() {
@@ -1278,22 +1386,14 @@ class EyeInspectorApp {
 		if (mode == this.highlightMode) return;
 		this.highlightMode = mode;
 
-		// Handle highlights and panels for the mode
-		if (mode == HighlightMode.Values) {
-			this.highlightMessages(EYES);
-		} else if (mode == HighlightMode.SharedCT) {
-			this.highlightMessagesUniform(Styles.Disabled);
-			this.highlightMessages(this.messagesSharedCT, "exclude");
-		} else {
-			this.highlightMessagesUniform(Styles.StandardDark);
-		}
+		this.refreshHighlight();
 
 		if (mode == HighlightMode.Isomorphs) {
-			this.setConfigPanels([this.isomorphGenerator]);
-			this.setInspectorPanels([this.isomorphInspector]);
+			this.setConfigPanels([this.isomorphGeneratorPanel]);
+			this.setInspectorPanels([this.isomorphInspectorPanel]);
 		} else if (mode == HighlightMode.SharedPT) {
-			this.setConfigPanels([this.isomorphGenerator, this.sharedPTConfig]);
-			this.setInspectorPanels([this.sharedPTInspector]);
+			this.setConfigPanels([this.isomorphGeneratorPanel, this.sharedPTConfigPanel]);
+			this.setInspectorPanels([this.sharedPTInspectorPanel]);
 		} else {
 			this.setConfigPanels([]);
 			this.setInspectorPanels([]);
@@ -1302,6 +1402,19 @@ class EyeInspectorApp {
 		// And finally update the highlight mode buttons
 		for (const mode in this.highlightButtonElements) {
 			this.highlightButtonElements[mode].classList.toggle("active", mode == this.highlightMode);
+		}
+	}
+
+	refreshHighlight() {
+		if (this.highlightMode == null) return;
+
+		if (this.highlightMode == HighlightMode.Values) {
+			this.highlightMessages(this.messages);
+		} else if (this.highlightMode == HighlightMode.SharedCT) {
+			this.highlightMessagesUniform(Styles.Disabled);
+			this.highlightMessages(this.messagesSharedCT, "exclude");
+		} else {
+			this.highlightMessagesUniform(Styles.StandardDark);
 		}
 	}
 
@@ -1338,7 +1451,7 @@ class EyeInspectorApp {
 	}
 
 	scrollTo(element) {
-		this.panelContentElement.scrollLeft = element.offsetLeft - 100;
+		this.panelContentElement.scrollLeft = element.offsetLeft - 300;
 	}
 
 	// ------------------ Panels ------------------
