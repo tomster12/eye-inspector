@@ -20,12 +20,14 @@
 						<div id="toggle-tight-spacing-button" class="messages-toolbar-option">Tight</div>
 						<div id="toggle-fullscreen-button" class="messages-toolbar-option">Fullscreen</div>
 
-						<div class="messages-toolbar-label" style="margin-left: 1rem">Highlight</div>
+						<div class="messages-toolbar-break"></div>
+						<div class="messages-toolbar-label">Mode</div>
 						<div id="toggle-highlight-none-button" class="messages-toolbar-option">None</div>
 						<div id="toggle-highlight-values-button" class="messages-toolbar-option">Values</div>
 						<div id="toggle-highlight-shared-ct-button" class="messages-toolbar-option">Shared CT</div>
 						<div id="toggle-highlight-isomorphs-button" class="messages-toolbar-option">Isomorphs</div>
 						<div id="toggle-highlight-shared-pt-button" class="messages-toolbar-option">Shared PT</div>
+						<div id="toggle-highlight-isomorphic-sections-button" class="messages-toolbar-option">Isomorphic Sections</div>
 					</div>
 
 					<div id="messages-panel-content">
@@ -90,6 +92,28 @@
 							</div>
 						</div>
 					</div>
+
+					<div id="isomorphic-sections-generator" style="display: none">
+						<p class="title">Isomorphic Sections</p>
+						<div class="content">
+							<div class="config-option">
+								<div class="label">Messages</div>
+							</div>
+							<div id="isomorphic-sections-generator-messages" class="message-toggle-list"></div>
+							<div id="isomorphic-sections-generator-select-all-button" class="button">
+								<div>Select All</div>
+							</div>
+							<div id="isomorphic-sections-generator-deselect-all-button" class="button">
+								<div>Deselect All</div>
+							</div>
+							<div id="isomorphic-sections-generator-generate-button" class="button">
+								<div>Generate</div>
+							</div>
+							<div id="isomorphic-sections-generator-clear-button" class="button">
+								<div>Clear</div>
+							</div>
+						</div>
+					</div>
 				</div>
 
 				<div id="inspector-panels">
@@ -110,6 +134,13 @@
 						<div id="shared-pt-inspector-list-info" class="inspector-info-row"></div>
 						<div id="shared-pt-inspector-list">
 							<div class="empty">No isomorphs...</div>
+						</div>
+					</div>
+
+					<div id="isomorphic-sections-inspector" style="display: none">
+						<div id="isomorphic-sections-inspector-list-info" class="inspector-info-row"></div>
+						<div id="isomorphic-sections-inspector-list">
+							<div class="empty">No isomorphic sections...</div>
 						</div>
 					</div>
 				</div>

@@ -462,17 +462,92 @@ function calculateShared(messages) {
 	return output;
 }
 
+function getSequencePattern(sequence) {
+	let letterMapping = {};
+	let letterCounts = {};
+	for (let value of sequence) letterCounts[value] = (letterCounts[value] || 0) + 1;
+
+	let pattern = "";
+	for (let value of sequence) {
+		if (letterCounts[value] > 1 && !letterMapping[value]) {
+			letterMapping[value] = String.fromCharCode(65 + Object.keys(letterMapping).length);
+		}
+		pattern += letterMapping[value] || ".";
+	}
+
+	return pattern;
+}
+
+function calculateLargestIsomorphicSections(messages) {
+	// messages: [{ index, values }] for just the selected subset. Greedily finds the largest
+	// sections that are isomorphic across EVERY selected message at once, longest first, and
+	// prevents shorter sections from re-claiming territory already covered by a larger one
+	if (messages.length < 2) return [];
+
+	const lengths = messages.map((message) => message.values.length);
+	const maxLength = messages.map((message, i) => Array.from({ length: lengths[i] }, (_, offset) => lengths[i] - offset));
+	const maxSectionLength = Math.min(...lengths) - 1;
+
+	const sections = [];
+
+	for (let length = maxSectionLength; length >= 1; length--) {
+		let queue = [];
+		for (let s0 = 0; s0 <= lengths[0] - length; s0++) {
+			for (let s1 = 0; s1 <= lengths[1] - length; s1++) {
+				queue.push([s0, s1]);
+			}
+		}
+
+		for (let queueIndex = 0; queueIndex < queue.length; queueIndex++) {
+			const current = queue[queueIndex];
+
+			// Skip if this position is already claimed by a larger section
+			if (current.some((start, i) => length > maxLength[i][start])) continue;
+
+			const texts = current.map((start, i) => messages[i].values.slice(start, start + length));
+			const pattern = getSequencePattern(texts[0]);
+			if (!pattern.includes("A")) continue;
+
+			const isIsomorphic = texts.every((text) => getSequencePattern(text) === pattern);
+			if (!isIsomorphic) continue;
+
+			if (current.length === messages.length) {
+				sections.push({
+					pattern,
+					length,
+					instances: current.map((start, i) => [messages[i].index, start]),
+				});
+
+				// Claim this territory so shorter sections don't re-report it
+				for (let i = 0; i < current.length; i++) {
+					const start = current[i];
+					for (let offset = Math.max(start - length + 1, 0); offset < start + length; offset++) {
+						maxLength[i][offset] = Math.max(start - offset, 0);
+					}
+				}
+			} else {
+				const nextIndex = current.length;
+				for (let s = 0; s <= lengths[nextIndex] - length; s++) {
+					queue.push([...current, s]);
+				}
+			}
+		}
+	}
+
+	return sections;
+}
+
 // ------------------------------------ Isomorphs
 
 const HighlightMode = Object.fromEntries(
-	["None", "Values", "SharedCT", "Isomorphs", "SharedPT"]
+	["None", "Values", "SharedCT", "Isomorphs", "SharedPT", "IsomorphicSections"]
 		.map((k, i) => [k, i]));
 
 class Styles {
 	static Disabled = { bg: null, fg: null };
 	static StandardDark = { bg: null, fg: "#ffffff" };
 	static StandardBright = { bg: "#77818d", fg: "#494c4d" };
-	static HueIndexMult = 3;
+	static HueIndexMult = 2;
 
 	static getIndexed(index, modifier = null) {
 		const hueOffset = 140;
@@ -1331,6 +1406,184 @@ class SharedPTInspectorPanel {
 	}
 }
 
+class IsomorphicSectionsGeneratorPanel {
+	constructor(app) {
+		this.app = app;
+		this.sections = [];
+		this.selectedMessageIndices = new Set();
+		this.onGenerate = new MyEvent();
+		this.isVisible = false;
+
+		this.containerElement = document.getElementById("isomorphic-sections-generator");
+		this.messageTogglesElement = document.getElementById("isomorphic-sections-generator-messages");
+		this.selectAllButtonElement = document.getElementById("isomorphic-sections-generator-select-all-button");
+		this.deselectAllButtonElement = document.getElementById("isomorphic-sections-generator-deselect-all-button");
+		this.generateButtonElement = document.getElementById("isomorphic-sections-generator-generate-button");
+		this.clearButtonElement = document.getElementById("isomorphic-sections-generator-clear-button");
+
+		this.selectAllButtonElement.onclick = () => this.setAllMessagesSelected(true);
+		this.deselectAllButtonElement.onclick = () => this.setAllMessagesSelected(false);
+		this.generateButtonElement.onclick = () => this.generate();
+		this.clearButtonElement.onclick = () => this.clear();
+
+		this.app.onMessagesChanged.listen(() => this.recreateMessageToggles());
+		this.recreateMessageToggles();
+	}
+
+	recreateMessageToggles() {
+		this.messageTogglesElement.innerHTML = "";
+		this.selectedMessageIndices = new Set();
+		this.sections = [];
+
+		for (let msgIndex = 0; msgIndex < this.app.messages.length; msgIndex++) {
+			const toggleElement = document.createElement("div");
+			toggleElement.classList.add("message-toggle");
+			toggleElement.textContent = (msgIndex + 1).toString();
+			toggleElement.onclick = () => this.toggleMessage(msgIndex, toggleElement);
+			this.messageTogglesElement.appendChild(toggleElement);
+		}
+	}
+
+	toggleMessage(msgIndex, toggleElement) {
+		if (this.selectedMessageIndices.has(msgIndex)) {
+			this.selectedMessageIndices.delete(msgIndex);
+		} else {
+			this.selectedMessageIndices.add(msgIndex);
+		}
+		toggleElement.classList.toggle("active", this.selectedMessageIndices.has(msgIndex));
+	}
+
+	setAllMessagesSelected(selected) {
+		this.selectedMessageIndices = selected ? new Set(this.app.messages.map((_, i) => i)) : new Set();
+		for (let toggleElement of this.messageTogglesElement.children) {
+			toggleElement.classList.toggle("active", selected);
+		}
+	}
+
+	async generate() {
+		this.toggleGenerateButtonSpinner(true);
+
+		// Add to the accumulated sections rather than replacing them, so separate runs over
+		// different message groups (e.g. 1-3, then 4-6, then 7-9) can all be seen at once
+		const messages = [...this.selectedMessageIndices].sort((a, b) => a - b).map((index) => ({ index, values: this.app.messages[index] }));
+		const newSections = calculateLargestIsomorphicSections(messages);
+		this.sections = this.sections.concat(newSections);
+
+		this.toggleGenerateButtonSpinner(false);
+		this.onGenerate.trigger(this.sections, newSections);
+	}
+
+	clear() {
+		this.sections = [];
+		this.onGenerate.trigger(this.sections, []);
+	}
+
+	toggleGenerateButtonSpinner(toggle) {
+		this.generateButtonElement.innerHTML = toggle ? "<div class='spinner'></div>" : "<div class='label'>Generate</div>";
+	}
+
+	setVisible(isVisible) {
+		this.isVisible = isVisible;
+		this.containerElement.style.display = isVisible ? "block" : "none";
+	}
+}
+
+class IsomorphicSectionsInspectorPanel {
+	constructor(app, generator) {
+		this.app = app;
+		this.generator = generator;
+		this.sectionDisplays = new Map();
+		this.selectedSections = new Set();
+		this.isVisible = false;
+
+		this.containerElement = document.getElementById("isomorphic-sections-inspector");
+		this.listElement = document.getElementById("isomorphic-sections-inspector-list");
+		this.listInfoElement = document.getElementById("isomorphic-sections-inspector-list-info");
+
+		this.generator.onGenerate.listen((sections, newSections) => this.recreateSectionElements(sections, newSections));
+	}
+
+	recreateSectionElements(sections, newSections) {
+		this.sectionDisplays = new Map();
+
+		// Keep prior selections for sections that survive, auto-select newly added ones so
+		// every freshly generated group is visible immediately without extra clicks
+		this.selectedSections = new Set(sections.filter((section) => this.selectedSections.has(section) || newSections.includes(section)));
+
+		if (sections.length == 0) {
+			this.listElement.innerHTML = "<div class='empty'>No isomorphic sections...</div>";
+		} else {
+			this.listElement.innerHTML = "";
+
+			for (let section of sections) {
+				const element = document.createElement("div");
+				element.classList.add("isomorph");
+				element.classList.toggle("selected", this.selectedSections.has(section));
+
+				const patternElement = document.createElement("div");
+				patternElement.classList.add("pattern");
+				patternElement.textContent = section.pattern;
+
+				const labelElement = document.createElement("div");
+				labelElement.classList.add("label");
+				labelElement.textContent = section.length.toString();
+
+				element.appendChild(patternElement);
+				element.appendChild(labelElement);
+				element.onclick = () => this.selectSection(section);
+
+				this.listElement.appendChild(element);
+				this.sectionDisplays.set(section, element);
+			}
+		}
+
+		// Setup the info for the list
+		this.listInfoElement.innerHTML = "";
+		const infoElement = document.createElement("div");
+		infoElement.textContent = "Total sections: " + sections.length;
+		this.listInfoElement.appendChild(infoElement);
+
+		this.calculateAndHighlight();
+	}
+
+	selectSection(section) {
+		if (this.selectedSections.has(section)) {
+			this.selectedSections.delete(section);
+		} else {
+			this.selectedSections.add(section);
+		}
+		this.sectionDisplays.get(section).classList.toggle("selected", this.selectedSections.has(section));
+
+		this.calculateAndHighlight();
+	}
+
+	calculateAndHighlight() {
+		if (!this.isVisible) return;
+
+		// Every selected section gets one solid colour across all its instances, so several
+		// separately-generated groups can be compared at a glance rather than one at a time
+		this.app.highlightMessagesUniform(Styles.Disabled);
+
+		for (let section of this.selectedSections) {
+			const [firstMsgIndex, firstStart] = section.instances[0];
+			const value = hashString(`${section.pattern}:${section.length}:${firstMsgIndex}:${firstStart}`);
+			const style = Styles.getIndexed(value);
+
+			for (let [msgIndex, start] of section.instances) {
+				for (let i = 0; i < section.length; i++) {
+					this.app.setLetterStyle(msgIndex, start + i, { ...style, highlighted: true });
+				}
+			}
+		}
+	}
+
+	setVisible(isVisible) {
+		this.isVisible = isVisible;
+		this.containerElement.style.display = isVisible ? "flex" : "none";
+		this.calculateAndHighlight();
+	}
+}
+
 class EyeInspectorApp {
 	constructor(messages) {
 		this.messages = messages;
@@ -1349,6 +1602,8 @@ class EyeInspectorApp {
 		this.sharedPTConfigPanel = new SharedPTConfigPanel(this);
 		this.isomorphInspectorPanel = new IsomorphInspectorPanel(this, this.isomorphGeneratorPanel);
 		this.sharedPTInspectorPanel = new SharedPTInspectorPanel(this, this.isomorphGeneratorPanel);
+		this.isomorphicSectionsGeneratorPanel = new IsomorphicSectionsGeneratorPanel(this);
+		this.isomorphicSectionsInspectorPanel = new IsomorphicSectionsInspectorPanel(this, this.isomorphicSectionsGeneratorPanel);
 
 		this.currentConfigPanels = [];
 		this.currentInspectorPanels = [];
@@ -1369,6 +1624,7 @@ class EyeInspectorApp {
 			[HighlightMode.SharedCT]: document.getElementById("toggle-highlight-shared-ct-button"),
 			[HighlightMode.Isomorphs]: document.getElementById("toggle-highlight-isomorphs-button"),
 			[HighlightMode.SharedPT]: document.getElementById("toggle-highlight-shared-pt-button"),
+			[HighlightMode.IsomorphicSections]: document.getElementById("toggle-highlight-isomorphic-sections-button"),
 		};
 
 		this.showAsciiButtonElement = document.getElementById("toggle-show-ascii-button");
@@ -1399,6 +1655,7 @@ class EyeInspectorApp {
 		this.refreshHighlight();
 
 		this.onMessagesChanged.trigger(messages);
+		this.isomorphicSectionsGeneratorPanel.generate();
 	}
 
 	recreateMessageElements() {
@@ -1490,6 +1747,9 @@ class EyeInspectorApp {
 		} else if (mode == HighlightMode.SharedPT) {
 			this.setConfigPanels([this.isomorphGeneratorPanel, this.sharedPTConfigPanel]);
 			this.setInspectorPanels([this.sharedPTInspectorPanel]);
+		} else if (mode == HighlightMode.IsomorphicSections) {
+			this.setConfigPanels([this.isomorphicSectionsGeneratorPanel]);
+			this.setInspectorPanels([this.isomorphicSectionsInspectorPanel]);
 		} else {
 			this.setConfigPanels([]);
 			this.setInspectorPanels([]);

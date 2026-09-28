@@ -129,11 +129,17 @@ body.fullscreen .layout-outer {
 	flex-direction: row;
 	align-items: center;
 	gap: var(--standard-padding);
+	row-gap: var(--small-padding);
 	flex-wrap: wrap;
 }
 
 #messages-panel .messages-toolbar-label {
 	color: var(--col-font-dull-1);
+}
+
+#messages-panel .messages-toolbar-break {
+	flex-basis: 100%;
+	height: 0;
 }
 
 #messages-panel .messages-toolbar-option {
@@ -348,6 +354,33 @@ body.tight-spacing #messages-panel .message div.highlighted {
 	background-color: var(--col-bg-button);
 }
 
+#config-panels .message-toggle-list {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	gap: calc(var(--message-gap) * 0.5);
+}
+
+#config-panels .message-toggle {
+	width: var(--message-letter-size);
+	height: var(--message-letter-size);
+	text-align: center;
+	line-height: var(--message-line-height);
+	border-radius: var(--standard-border-radius);
+	background-color: var(--col-bg-toggle-button);
+	color: var(--col-font-text);
+	cursor: pointer;
+	user-select: none;
+}
+
+#config-panels .message-toggle:hover {
+	background-color: var(--col-bg-toggle-button-hovered);
+}
+
+#config-panels .message-toggle.active {
+	background-color: var(--col-bg-toggle-button-active);
+}
+
 #config-panels .button {
 	user-select: none;
 	cursor: pointer;
@@ -416,7 +449,8 @@ body.tight-spacing #messages-panel .message div.highlighted {
 /* --------------------- Isomorphs Inspector --------------------- */
 
 #isomorphs-inspector,
-#shared-pt-inspector {
+#shared-pt-inspector,
+#isomorphic-sections-inspector {
 	border-radius: var(--standard-border-radius);
 	display: flex;
 	flex-direction: column;
@@ -428,7 +462,8 @@ body.tight-spacing #messages-panel .message div.highlighted {
 }
 
 #isomorphs-inspector-list,
-#shared-pt-inspector-list {
+#shared-pt-inspector-list,
+#isomorphic-sections-inspector-list {
 	display: flex;
 	flex-direction: row;
 	flex-wrap: wrap;
@@ -444,12 +479,14 @@ body.tight-spacing #messages-panel .message div.highlighted {
 }
 
 body.fullscreen #isomorphs-inspector-list,
-body.fullscreen #shared-pt-inspector-list {
+body.fullscreen #shared-pt-inspector-list,
+body.fullscreen #isomorphic-sections-inspector-list {
 	max-height: unset;
 }
 
 #isomorphs-inspector-list .empty,
-#shared-pt-inspector-list .empty {
+#shared-pt-inspector-list .empty,
+#isomorphic-sections-inspector-list .empty {
 	color: var(--col-font-text);
 	text-align: center;
 	flex-shrink: 0;
@@ -457,7 +494,8 @@ body.fullscreen #shared-pt-inspector-list {
 }
 
 #isomorphs-inspector .isomorph,
-#shared-pt-inspector .isomorph {
+#shared-pt-inspector .isomorph,
+#isomorphic-sections-inspector .isomorph {
 	display: flex;
 	flex-direction: row;
 	width: fit-content;
@@ -472,14 +510,16 @@ body.fullscreen #shared-pt-inspector-list {
 }
 
 #isomorphs-inspector .isomorph .pattern,
-#shared-pt-inspector .isomorph .pattern {
+#shared-pt-inspector .isomorph .pattern,
+#isomorphic-sections-inspector .isomorph .pattern {
 	padding: 0.3rem;
 	background-color: var(--col-bg-isomorph-pattern);
 	border-radius: var(--standard-border-radius);
 }
 
 #isomorphs-inspector .isomorph .label,
-#shared-pt-inspector .isomorph .label {
+#shared-pt-inspector .isomorph .label,
+#isomorphic-sections-inspector .isomorph .label {
 	vertical-align: middle;
 	padding: 0 0.8rem;
 	color: var(--col-font-text);
@@ -492,22 +532,26 @@ body.fullscreen #shared-pt-inspector-list {
 }
 
 #isomorphs-inspector .isomorph.selected,
-#shared-pt-inspector .isomorph.selected {
+#shared-pt-inspector .isomorph.selected,
+#isomorphic-sections-inspector .isomorph.selected {
 	background-color: var(--col-bg-isomorph-selected);
 }
 
 #isomorphs-inspector .isomorph.selected .pattern,
-#shared-pt-inspector .isomorph.selected .pattern {
+#shared-pt-inspector .isomorph.selected .pattern,
+#isomorphic-sections-inspector .isomorph.selected .pattern {
 	background-color: var(--col-bg-isomorph-pattern-selected);
 }
 
 #isomorphs-inspector .isomorph:hover,
-#shared-pt-inspector .isomorph:hover {
+#shared-pt-inspector .isomorph:hover,
+#isomorphic-sections-inspector .isomorph:hover {
 	background-color: var(--col-bg-isomorph-hover);
 }
 
 #isomorphs-inspector .isomorph:hover .pattern,
-#shared-pt-inspector .isomorph:hover .pattern {
+#shared-pt-inspector .isomorph:hover .pattern,
+#isomorphic-sections-inspector .isomorph:hover .pattern {
 	background-color: var(--col-bg-isomorph-pattern-hovered);
 }
 
